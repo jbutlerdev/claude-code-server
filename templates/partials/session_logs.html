@@ -1,0 +1,11 @@
+<div class="space-y-2">
+    {{range .}}
+    <div class="text-sm font-mono border-l-2 border-blue-500 pl-2 mb-1">
+        <span class="text-gray-400">[{{.LogType}}]</span>
+        <span class="text-gray-300">{{.Content}}</span>
+        <span class="text-gray-500 text-xs ml-2">{{.CreatedAt.Format "15:04:05"}}</span>
+    </div>
+    {{else}}
+    <div class="text-gray-400 text-sm">No logs available</div>
+    {{end}}
+</div>

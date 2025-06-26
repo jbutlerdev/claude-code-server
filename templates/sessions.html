@@ -1,0 +1,131 @@
+{{template "base.html" .}}
+
+{{define "content"}}
+<div class="space-y-6">
+    <div class="flex justify-between items-center">
+        <h1 class="text-3xl font-bold">Sessions</h1>
+        <button onclick="document.getElementById('new-session-modal').classList.remove('hidden')" 
+                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+            New Session
+        </button>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-dark-800 rounded-lg p-4 border border-dark-700">
+        <form hx-get="/htmx/sessions" hx-target="#sessions-list" class="flex gap-4 items-end">
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Status</label>
+                <select name="status" class="bg-dark-700 border border-dark-600 text-white rounded-lg px-3 py-2">
+                    <option value="">All Statuses</option>
+                    <option value="starting" {{if eq .Query.Status "starting"}}selected{{end}}>Starting</option>
+                    <option value="running" {{if eq .Query.Status "running"}}selected{{end}}>Running</option>
+                    <option value="completed" {{if eq .Query.Status "completed"}}selected{{end}}>Completed</option>
+                    <option value="failed" {{if eq .Query.Status "failed"}}selected{{end}}>Failed</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Project</label>
+                <select name="project_id" class="bg-dark-700 border border-dark-600 text-white rounded-lg px-3 py-2">
+                    <option value="">All Projects</option>
+                    {{range .Projects}}
+                    <option value="{{.ID}}" {{if eq $.Query.ProjectID .ID.String}}selected{{end}}>{{.Name}}</option>
+                    {{end}}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Page Size</label>
+                <select name="page_size" class="bg-dark-700 border border-dark-600 text-white rounded-lg px-3 py-2">
+                    <option value="10" {{if eq .Query.PageSize 10}}selected{{end}}>10</option>
+                    <option value="20" {{if eq .Query.PageSize 20}}selected{{end}}>20</option>
+                    <option value="50" {{if eq .Query.PageSize 50}}selected{{end}}>50</option>
+                </select>
+            </div>
+            <button type="submit" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors">
+                Filter
+            </button>
+        </form>
+    </div>
+
+    <!-- Sessions List -->
+    <div id="sessions-list">
+        {{template "partials/sessions_list.html" .Sessions}}
+    </div>
+</div>
+
+<!-- New Session Modal -->
+<div id="new-session-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-dark-800 rounded-lg p-6 w-full max-w-md border border-dark-700">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold">New Session</h2>
+            <button onclick="document.getElementById('new-session-modal').classList.add('hidden')" 
+                    class="text-gray-400 hover:text-white">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        <form class="space-y-4" onsubmit="createSession(event)">
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Project</label>
+                <select name="project_id" required class="w-full bg-dark-700 border border-dark-600 text-white rounded-lg px-3 py-2">
+                    <option value="">Select a project</option>
+                    {{range .Projects}}
+                    <option value="{{.ID}}">{{.Name}}</option>
+                    {{end}}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Prompt</label>
+                <textarea name="prompt" required rows="4" 
+                         class="w-full bg-dark-700 border border-dark-600 text-white rounded-lg px-3 py-2"
+                         placeholder="Enter your prompt for Claude Code..."></textarea>
+            </div>
+            <div class="flex gap-3">
+                <button type="button" 
+                        onclick="document.getElementById('new-session-modal').classList.add('hidden')"
+                        class="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 rounded-lg transition-colors">
+                    Cancel
+                </button>
+                <button type="submit" 
+                        class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg transition-colors">
+                    Create Session
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+async function createSession(event) {
+    event.preventDefault();
+    const form = event.target;
+    const formData = new FormData(form);
+    
+    try {
+        const response = await fetch('/api/sessions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer dev-key'
+            },
+            body: JSON.stringify({
+                project_id: formData.get('project_id'),
+                prompt: formData.get('prompt')
+            })
+        });
+        
+        if (response.ok) {
+            const session = await response.json();
+            document.getElementById('new-session-modal').classList.add('hidden');
+            form.reset();
+            htmx.trigger('#sessions-list', 'refresh');
+            window.location.href = `/sessions/${session.id}`;
+        } else {
+            alert('Failed to create session');
+        }
+    } catch (error) {
+        alert('Error creating session: ' + error.message);
+    }
+}
+</script>
+{{end}}

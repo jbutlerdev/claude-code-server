@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - Claude Code Server</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: {
+                            50: '#f9fafb',
+                            100: '#f3f4f6',
+                            200: '#e5e7eb',
+                            300: '#d1d5db',
+                            400: '#9ca3af',
+                            500: '#6b7280',
+                            600: '#4b5563',
+                            700: '#374151',
+                            800: '#1f2937',
+                            900: '#111827',
+                            950: '#0f172a'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .scrollbar-hide { scrollbar-width: none; -ms-overflow-style: none; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="bg-dark-950 text-gray-100 min-h-screen">
+    <nav class="bg-dark-900 border-b border-dark-700 px-4 py-3">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-8">
+                <a href="/" class="text-xl font-bold text-white">Claude Code Server</a>
+                <div class="flex space-x-4">
+                    <a href="/" class="text-gray-300 hover:text-white transition-colors">Dashboard</a>
+                    <a href="/sessions" class="text-gray-300 hover:text-white transition-colors">Sessions</a>
+                    <a href="/projects" class="text-white font-medium">Projects</a>
+                    <a href="/terminal" class="text-gray-300 hover:text-white transition-colors">Terminal</a>
+                    <a href="/settings" class="text-gray-300 hover:text-white transition-colors">Settings</a>
+                    <a href="/api-docs" class="text-gray-300 hover:text-white transition-colors">API Docs</a>
+                </div>
+            </div>
+            <div class="flex items-center space-x-4">
+                <div class="text-sm text-gray-400">
+                    <span class="inline-block w-2 h-2 bg-green-500 rounded-full mr-1"></span>
+                    Online
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 py-8">
+        <div class="space-y-6">
+            <div class="flex justify-between items-center">
+                <h1 class="text-3xl font-bold text-white">Projects</h1>
+                <a href="/projects/new" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+                    Add Project
+                </a>
+            </div>
+
+            <div class="bg-dark-900 rounded-lg border border-dark-700 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-dark-700">
+                        <thead class="bg-dark-800">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Name</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Git URL</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Created</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-dark-900 divide-y divide-dark-700">
+                            {{range .Projects}}
+                            <tr class="hover:bg-dark-800">
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="text-sm font-medium text-white">{{.Name}}</div>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                    {{if .RemoteURL}}
+                                        <a href="{{.RemoteURL}}" target="_blank" class="text-blue-400 hover:text-blue-300">
+                                            {{.RemoteURL}}
+                                        </a>
+                                    {{else}}
+                                        <span class="text-gray-500">Local</span>
+                                    {{end}}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    {{if eq .Status "ready"}}
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            <svg class="w-1.5 h-1.5 mr-1.5" fill="currentColor" viewBox="0 0 8 8">
+                                                <circle cx="4" cy="4" r="3"/>
+                                            </svg>
+                                            Ready
+                                        </span>
+                                    {{else if eq .Status "pending"}}
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                            <svg class="w-1.5 h-1.5 mr-1.5" fill="currentColor" viewBox="0 0 8 8">
+                                                <circle cx="4" cy="4" r="3"/>
+                                            </svg>
+                                            Pending
+                                        </span>
+                                    {{else if eq .Status "syncing"}}
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                            <svg class="animate-spin w-1.5 h-1.5 mr-1.5" fill="none" viewBox="0 0 24 24">
+                                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                <path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                            Syncing
+                                        </span>
+                                    {{else if eq .Status "error"}}
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800" title="{{.ErrorMessage}}">
+                                            <svg class="w-1.5 h-1.5 mr-1.5" fill="currentColor" viewBox="0 0 8 8">
+                                                <circle cx="4" cy="4" r="3"/>
+                                            </svg>
+                                            Error
+                                        </span>
+                                    {{else}}
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                            {{.Status}}
+                                        </span>
+                                    {{end}}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                                    {{.CreatedAt.Format "Jan 2, 2006"}}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                                    <button onclick="openSessionModal('{{.ID}}', '{{.Name}}')" 
+                                            class="text-blue-400 hover:text-blue-300">
+                                        New Session
+                                    </button>
+                                    <button onclick="deleteProject('{{.ID}}')" 
+                                            class="text-red-400 hover:text-red-300">
+                                        Delete
+                                    </button>
+                                </td>
+                            </tr>
+                            {{else}}
+                            <tr>
+                                <td colspan="5" class="px-6 py-8 text-center text-gray-400">
+                                    <div class="flex flex-col items-center">
+                                        <svg class="w-12 h-12 mb-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                        </svg>
+                                        <p class="text-lg font-medium">No projects yet</p>
+                                        <p class="mt-1">Create your first project to get started with Claude Code</p>
+                                        <a href="/projects/new" class="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+                                            Add Your First Project
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- New Session Modal -->
+    <div id="session-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-dark-800 rounded-lg p-6 w-full max-w-lg border border-dark-700">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">New Session for <span id="modal-project-name"></span></h2>
+                <button onclick="closeSessionModal()" class="text-gray-400 hover:text-white">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <form id="session-form" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">Session Prompt</label>
+                    <textarea id="session-prompt" required rows="6" 
+                             class="w-full bg-dark-700 border border-dark-600 text-white rounded-lg px-3 py-2 focus:border-blue-500 focus:outline-none"
+                             placeholder="Enter your prompt for the Claude Code session...&#10;&#10;For example:&#10;- Help me implement a new feature&#10;- Review and refactor my code&#10;- Debug an issue I'm having"></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">Max Turns</label>
+                    <input type="number" id="session-max-turns" min="1" value="25"
+                           class="w-full bg-dark-700 border border-dark-600 text-white rounded-lg px-3 py-2 focus:border-blue-500 focus:outline-none"
+                           placeholder="Maximum number of turns for the session">
+                    <p class="text-xs text-gray-400 mt-1">Number of back-and-forth exchanges with Claude (default: 25)</p>
+                </div>
+                <div class="flex gap-3">
+                    <button type="button" onclick="closeSessionModal()"
+                            class="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 rounded-lg transition-colors">
+                        Cancel
+                    </button>
+                    <button type="submit" 
+                            class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg transition-colors">
+                        Create Session
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let currentProjectId = null;
+
+        function openSessionModal(projectId, projectName) {
+            currentProjectId = projectId;
+            document.getElementById('modal-project-name').textContent = projectName;
+            document.getElementById('session-prompt').value = '';
+            document.getElementById('session-max-turns').value = '25';
+            document.getElementById('session-modal').classList.remove('hidden');
+            document.getElementById('session-prompt').focus();
+        }
+
+        function closeSessionModal() {
+            document.getElementById('session-modal').classList.add('hidden');
+            currentProjectId = null;
+        }
+
+        document.getElementById('session-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!currentProjectId) return;
+
+            const prompt = document.getElementById('session-prompt').value;
+            const maxTurns = parseInt(document.getElementById('session-max-turns').value) || 25;
+            if (!prompt.trim()) return;
+
+            try {
+                const response = await fetch('/api/sessions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer dev-key'
+                    },
+                    body: JSON.stringify({
+                        project_id: currentProjectId,
+                        prompt: prompt.trim(),
+                        max_turns: maxTurns
+                    })
+                });
+
+                if (response.ok) {
+                    const session = await response.json();
+                    window.location.href = `/sessions/${session.id}`;
+                } else {
+                    const error = await response.text();
+                    alert('Failed to create session: ' + error);
+                }
+            } catch (error) {
+                alert('Error creating session: ' + error.message);
+            }
+        });
+
+        async function deleteProject(projectId) {
+            if (!confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/projects/${projectId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': 'Bearer dev-key'
+                    }
+                });
+
+                if (response.ok) {
+                    location.reload();
+                } else {
+                    const error = await response.text();
+                    alert('Failed to delete project: ' + error);
+                }
+            } catch (error) {
+                alert('Error deleting project: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>

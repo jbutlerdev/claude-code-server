@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - Claude Code Server</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/xterm@5.3.0/lib/xterm.js"></script>
+    <link href="https://unpkg.com/xterm@5.3.0/css/xterm.css" rel="stylesheet" />
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: {
+                            50: '#f9fafb',
+                            100: '#f3f4f6',
+                            200: '#e5e7eb',
+                            300: '#d1d5db',
+                            400: '#9ca3af',
+                            500: '#6b7280',
+                            600: '#4b5563',
+                            700: '#374151',
+                            800: '#1f2937',
+                            900: '#111827',
+                            950: '#0f172a'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .scrollbar-hide { scrollbar-width: none; -ms-overflow-style: none; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .terminal-container { background: #000; }
+    </style>
+</head>
+<body class="bg-dark-950 text-gray-100 min-h-screen">
+    <nav class="bg-dark-900 border-b border-dark-700 px-4 py-3">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-8">
+                <a href="/" class="text-xl font-bold text-white">Claude Code Server</a>
+                <div class="flex space-x-4">
+                    <a href="/" class="text-gray-300 hover:text-white transition-colors">Dashboard</a>
+                    <a href="/sessions" class="text-gray-300 hover:text-white transition-colors">Sessions</a>
+                    <a href="/projects" class="text-gray-300 hover:text-white transition-colors">Projects</a>
+                    <a href="/terminal" class="text-white font-medium">Terminal</a>
+                    <a href="/settings" class="text-gray-300 hover:text-white transition-colors">Settings</a>
+                    <a href="/api-docs" class="text-gray-300 hover:text-white transition-colors">API Docs</a>
+                </div>
+            </div>
+            <div class="flex items-center space-x-4">
+                <div class="text-sm text-gray-400">
+                    <span class="inline-block w-2 h-2 bg-green-500 rounded-full mr-1"></span>
+                    Online
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 py-8">
+        <div class="space-y-6">
+            <div class="flex justify-between items-center">
+                <h1 class="text-3xl font-bold text-white">Terminal</h1>
+                <div class="text-sm text-gray-400">
+                    Use this terminal to run <code class="bg-dark-700 px-2 py-1 rounded">claude /login</code> to authenticate
+                </div>
+            </div>
+            
+            <div class="bg-dark-900 rounded-lg border border-dark-700 p-4">
+                <div class="bg-black rounded p-4 terminal-container overflow-hidden">
+                    <div id="terminal" class="w-full h-96 overflow-hidden"></div>
+                </div>
+            </div>
+
+            <div class="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
+                <h3 class="text-blue-400 font-semibold mb-2">Quick Start:</h3>
+                <ol class="list-decimal list-inside space-y-1 text-sm text-gray-300">
+                    <li>Run <code class="bg-dark-700 px-1 rounded">claude /login</code> to authenticate with Anthropic</li>
+                    <li>Follow the OAuth flow in your browser</li>
+                    <li>Your authentication will persist across container restarts</li>
+                    <li>Use <code class="bg-dark-700 px-1 rounded">claude --help</code> to see available commands</li>
+                </ol>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Initialize terminal
+        const terminal = new Terminal({
+            cursorBlink: true,
+            fontSize: 14,
+            fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+            theme: {
+                background: '#000000',
+                foreground: '#ffffff',
+            }
+        });
+
+        terminal.open(document.getElementById('terminal'));
+
+        // Connect to WebSocket
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/ws/terminal`;
+        const ws = new WebSocket(wsUrl);
+
+        ws.onopen = function() {
+            terminal.write('\r\n\x1b[32mConnected to terminal\x1b[0m\r\n');
+        };
+
+        ws.onmessage = function(event) {
+            terminal.write(event.data);
+        };
+
+        ws.onclose = function() {
+            terminal.write('\r\n\x1b[31mConnection closed\x1b[0m\r\n');
+        };
+
+        ws.onerror = function() {
+            terminal.write('\r\n\x1b[31mConnection error\x1b[0m\r\n');
+        };
+
+        // Send terminal input to WebSocket
+        terminal.onData(function(data) {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(data);
+            }
+        });
+
+        // Handle terminal resize
+        function resizeTerminal() {
+            const container = document.getElementById('terminal');
+            const rect = container.getBoundingClientRect();
+            const cols = Math.floor((rect.width - 16) / 9); // Character width with padding
+            const rows = Math.floor((rect.height - 16) / 20); // Line height with padding
+            
+            if (cols > 0 && rows > 0) {
+                terminal.resize(cols, rows);
+            }
+        }
+
+        window.addEventListener('resize', resizeTerminal);
+        setTimeout(resizeTerminal, 500); // Delay for proper rendering
+    </script>
+</body>
+</html>

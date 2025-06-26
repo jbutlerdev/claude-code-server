@@ -1,0 +1,40 @@
+{{define "partials/sessions_list.html"}}
+<table class="w-full">
+    <thead class="bg-dark-700">
+        <tr>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Project</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Prompt</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Started</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
+        </tr>
+    </thead>
+    <tbody class="divide-y divide-dark-700">
+        {{range .Items}}
+        <tr class="hover:bg-dark-700">
+            <td class="px-6 py-4 whitespace-nowrap">
+                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full 
+                    {{if eq .Status "running"}}bg-yellow-100 text-yellow-800{{end}}
+                    {{if eq .Status "completed"}}bg-green-100 text-green-800{{end}}
+                    {{if eq .Status "failed"}}bg-red-100 text-red-800{{end}}
+                    {{if eq .Status "starting"}}bg-blue-100 text-blue-800{{end}}">
+                    {{.Status}}
+                </span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                {{.ProjectID}}
+            </td>
+            <td class="px-6 py-4 text-sm text-gray-300 max-w-xs truncate">
+                {{.InitialPrompt}}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                {{.StartedAt.Format "Jan 2, 15:04"}}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                <a href="/sessions/{{.ID}}" class="text-blue-400 hover:text-blue-300">View</a>
+            </td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+{{end}}

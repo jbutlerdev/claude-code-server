@@ -1,0 +1,29 @@
+<div class="space-y-2">
+    {{range .}}
+    <div class="bg-dark-800 rounded-lg p-4 border border-dark-700">
+        <div class="flex justify-between items-start">
+            <div>
+                <h3 class="font-medium text-gray-100">{{.Name}}</h3>
+                <p class="text-sm text-gray-400 font-mono">{{.Path}}</p>
+                {{if .RemoteURL}}
+                <p class="text-sm text-blue-400">
+                    <a href="{{.RemoteURL}}" target="_blank" class="hover:text-blue-300">{{.RemoteURL}}</a>
+                </p>
+                {{end}}
+                {{if .GitHubToken}}
+                <p class="text-xs text-green-400">
+                    🔑 Custom GitHub token configured
+                </p>
+                {{end}}
+            </div>
+            <div class="text-xs text-gray-500">
+                {{.CreatedAt.Format "Jan 2, 2006"}}
+            </div>
+        </div>
+    </div>
+    {{else}}
+    <div class="text-gray-400 text-sm text-center py-8">
+        No projects found. <a href="/projects/new" class="text-blue-400 hover:text-blue-300">Create your first project</a>
+    </div>
+    {{end}}
+</div>

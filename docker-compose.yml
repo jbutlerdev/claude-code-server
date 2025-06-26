@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: claude-code-server
+    ports:
+      - "8084:8080"
+    environment:
+      DATABASE_URL: postgres://claude:password@db:5432/claude_code_server?sslmode=disable
+      CLAUDE_CODE_API_KEY: ${CLAUDE_CODE_API_KEY}
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8080
+      MAX_CONCURRENT_SESSIONS: 10
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+    volumes:
+      - worktrees:/var/lib/claude-code-server/worktrees
+      - claude_config:/home/appuser
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  db:
+    image: postgres:16-alpine
+    container_name: claude-code-postgres
+    environment:
+      POSTGRES_USER: claude
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: claude_code_server
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U claude -d claude_code_server"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Optional: Nginx reverse proxy for production
+  nginx:
+    image: nginx:alpine
+    container_name: claude-code-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - app
+    restart: unless-stopped
+    profiles:
+      - production
+
+volumes:
+  worktrees:
+    driver: local
+  postgres_data:
+    driver: local
+  claude_config:
+    driver: local
+
+networks:
+  default:
+    name: claude-code-network

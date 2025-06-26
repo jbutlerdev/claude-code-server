@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - Claude Code Server</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: {
+                            50: '#f9fafb',
+                            100: '#f3f4f6',
+                            200: '#e5e7eb',
+                            300: '#d1d5db',
+                            400: '#9ca3af',
+                            500: '#6b7280',
+                            600: '#4b5563',
+                            700: '#374151',
+                            800: '#1f2937',
+                            900: '#111827',
+                            950: '#0f172a'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .scrollbar-hide { scrollbar-width: none; -ms-overflow-style: none; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="bg-dark-950 text-gray-100 min-h-screen">
+    <nav class="bg-dark-900 border-b border-dark-700 px-4 py-3">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-8">
+                <a href="/" class="text-xl font-bold text-white">Claude Code Server</a>
+                <div class="flex space-x-4">
+                    <a href="/" class="text-gray-300 hover:text-white transition-colors">Dashboard</a>
+                    <a href="/sessions" class="text-gray-300 hover:text-white transition-colors">Sessions</a>
+                    <a href="/projects" class="text-gray-300 hover:text-white transition-colors">Projects</a>
+                    <a href="/terminal" class="text-gray-300 hover:text-white transition-colors">Terminal</a>
+                    <a href="/settings" class="text-gray-300 hover:text-white transition-colors">Settings</a>
+                    <a href="/api-docs" class="text-gray-300 hover:text-white transition-colors">API Docs</a>
+                </div>
+            </div>
+            <div class="flex items-center space-x-4">
+                <div class="text-sm text-gray-400">
+                    <span class="inline-block w-2 h-2 bg-green-500 rounded-full mr-1"></span>
+                    Online
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 py-8">
+        <div class="space-y-8">
+            <div class="flex justify-between items-center">
+                <h1 class="text-3xl font-bold">Dashboard</h1>
+                <div class="flex space-x-4">
+                    <a href="/sessions" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+                        View All Sessions
+                    </a>
+                    <a href="/projects/new" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors">
+                        New Project
+                    </a>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Stats Cards -->
+                <div class="bg-dark-800 rounded-lg p-6 border border-dark-700">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <div class="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+                                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="ml-4">
+                            <div class="text-2xl font-bold">{{.Sessions.TotalItems}}</div>
+                            <div class="text-gray-400">Total Sessions</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-dark-800 rounded-lg p-6 border border-dark-700">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <div class="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
+                                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="ml-4">
+                            <div class="text-2xl font-bold">{{len .Projects}}</div>
+                            <div class="text-gray-400">Projects</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-dark-800 rounded-lg p-6 border border-dark-700">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <div class="w-8 h-8 bg-yellow-500 rounded-lg flex items-center justify-center">
+                                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="ml-4">
+                            <div class="text-2xl font-bold">
+                                {{$running := 0}}
+                                {{range .Sessions.Items}}
+                                    {{if eq .Status "running"}}{{$running = add $running 1}}{{end}}
+                                {{end}}
+                                {{$running}}
+                            </div>
+                            <div class="text-gray-400">Active Sessions</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Sessions -->
+            <div class="bg-dark-800 rounded-lg border border-dark-700">
+                <div class="px-6 py-4 border-b border-dark-700">
+                    <h2 class="text-xl font-semibold">Recent Sessions</h2>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-dark-700">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Project</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Prompt</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Started</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-dark-700">
+                            {{range .Sessions.Items}}
+                            <tr class="hover:bg-dark-700">
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full 
+                                        {{if eq .Status "running"}}bg-yellow-100 text-yellow-800{{end}}
+                                        {{if eq .Status "completed"}}bg-green-100 text-green-800{{end}}
+                                        {{if eq .Status "failed"}}bg-red-100 text-red-800{{end}}
+                                        {{if eq .Status "starting"}}bg-blue-100 text-blue-800{{end}}">
+                                        {{.Status}}
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                    {{.ProjectID}}
+                                </td>
+                                <td class="px-6 py-4 text-sm text-gray-300 max-w-xs truncate">
+                                    {{.InitialPrompt}}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                                    {{.StartedAt.Format "Jan 2, 15:04"}}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                    <a href="/sessions/{{.ID}}" class="text-blue-400 hover:text-blue-300">View</a>
+                                </td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Auto-refresh live sessions
+        document.addEventListener('htmx:afterRequest', function(evt) {
+            if (evt.detail.xhr.status === 200 && evt.detail.target.hasAttribute('hx-trigger')) {
+                setTimeout(function() {
+                    htmx.trigger(evt.detail.target, 'refresh');
+                }, 2000);
+            }
+        });
+
+        // Handle server-sent events for live logs
+        function connectEventSource(url, target) {
+            const eventSource = new EventSource(url);
+            eventSource.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                const logElement = document.createElement('div');
+                logElement.className = 'text-sm font-mono border-l-2 border-blue-500 pl-2 mb-1';
+                logElement.innerHTML = `<span class="text-gray-400">[${data.log_type}]</span> ${data.content}`;
+                target.appendChild(logElement);
+                target.scrollTop = target.scrollHeight;
+            };
+            return eventSource;
+        }
+    </script>
+</body>
+</html>
