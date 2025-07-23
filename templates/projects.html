@@ -60,8 +60,8 @@
 
     <main class="max-w-7xl mx-auto px-4 py-8">
         <div class="space-y-6">
-            <div class="flex justify-between items-center">
-                <h1 class="text-3xl font-bold text-white">Projects</h1>
+            <div>
+                <h1 class="text-3xl font-bold text-white mb-4">Projects</h1>
                 <a href="/projects/new" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
                     Add Project
                 </a>
@@ -187,10 +187,10 @@
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-300 mb-2">Max Turns</label>
-                    <input type="number" id="session-max-turns" min="1" value="25"
+                    <input type="number" id="session-max-turns" min="1" value="{{.DefaultMaxTurns}}"
                            class="w-full bg-dark-700 border border-dark-600 text-white rounded-lg px-3 py-2 focus:border-blue-500 focus:outline-none"
                            placeholder="Maximum number of turns for the session">
-                    <p class="text-xs text-gray-400 mt-1">Number of back-and-forth exchanges with Claude (default: 25)</p>
+                    <p class="text-xs text-gray-400 mt-1">Number of back-and-forth exchanges with Claude (default: {{.DefaultMaxTurns}})</p>
                 </div>
                 <div class="flex gap-3">
                     <button type="button" onclick="closeSessionModal()"
@@ -213,7 +213,7 @@
             currentProjectId = projectId;
             document.getElementById('modal-project-name').textContent = projectName;
             document.getElementById('session-prompt').value = '';
-            document.getElementById('session-max-turns').value = '25';
+            document.getElementById('session-max-turns').value = '{{.DefaultMaxTurns}}';
             document.getElementById('session-modal').classList.remove('hidden');
             document.getElementById('session-prompt').focus();
         }
@@ -228,7 +228,7 @@
             if (!currentProjectId) return;
 
             const prompt = document.getElementById('session-prompt').value;
-            const maxTurns = parseInt(document.getElementById('session-max-turns').value) || 25;
+            const maxTurns = parseInt(document.getElementById('session-max-turns').value) || {{.DefaultMaxTurns}};
             if (!prompt.trim()) return;
 
             try {
@@ -281,5 +281,6 @@
             }
         }
     </script>
+    </main>
 </body>
 </html>

@@ -171,13 +171,22 @@ func (api *API) resumeSessionHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = api.sessionManager.ResumeSession(r.Context(), id, req.Prompt)
+	newSession, err := api.sessionManager.ResumeSession(r.Context(), id, req.Prompt)
 	if err != nil {
 		api.writeError(w, http.StatusInternalServerError, "Failed to resume session", err)
 		return
 	}
 
-	w.WriteHeader(http.StatusAccepted)
+	response := models.CreateSessionResponse{
+		ID:           newSession.ID.String(),
+		Status:       string(newSession.Status),
+		CreatedAt:    newSession.CreatedAt.Format(time.RFC3339),
+		WorktreePath: newSession.WorktreePath,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(response)
 }
 
 func (api *API) getSessionLogsHandler(w http.ResponseWriter, r *http.Request) {

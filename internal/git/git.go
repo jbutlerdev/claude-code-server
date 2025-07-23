@@ -16,7 +16,7 @@ func NewService() *Service {
 }
 
 // CloneRepository clones a git repository to the specified path
-func (s *Service) CloneRepository(remoteURL, localPath, branch string) error {
+func (s *Service) CloneRepository(remoteURL, localPath, branch, token string) error {
 	// Ensure parent directory exists
 	if err := os.MkdirAll(filepath.Dir(localPath), 0755); err != nil {
 		return fmt.Errorf("failed to create parent directory: %w", err)
@@ -29,8 +29,14 @@ func (s *Service) CloneRepository(remoteURL, localPath, branch string) error {
 		}
 	}
 
+	// Use authenticated URL if token is provided
+	cloneURL := remoteURL
+	if token != "" {
+		cloneURL = s.buildAuthenticatedURL(remoteURL, token)
+	}
+
 	// Clone the repository
-	cmd := exec.Command("git", "clone", "--branch", branch, remoteURL, localPath)
+	cmd := exec.Command("git", "clone", "--branch", branch, cloneURL, localPath)
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0") // Disable interactive prompts
 
 	output, err := cmd.CombinedOutput()
@@ -42,8 +48,14 @@ func (s *Service) CloneRepository(remoteURL, localPath, branch string) error {
 }
 
 // ValidateRepository checks if a remote repository is accessible
-func (s *Service) ValidateRepository(remoteURL, branch string) error {
-	cmd := exec.Command("git", "ls-remote", "--heads", remoteURL, branch)
+func (s *Service) ValidateRepository(remoteURL, branch, token string) error {
+	// Use authenticated URL if token is provided
+	validateURL := remoteURL
+	if token != "" {
+		validateURL = s.buildAuthenticatedURL(remoteURL, token)
+	}
+
+	cmd := exec.Command("git", "ls-remote", "--heads", validateURL, branch)
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 
 	output, err := cmd.CombinedOutput()
@@ -74,8 +86,14 @@ func (s *Service) RepositoryExists(localPath string) bool {
 }
 
 // GetDefaultBranch attempts to determine the default branch of a remote repository
-func (s *Service) GetDefaultBranch(remoteURL string) (string, error) {
-	cmd := exec.Command("git", "ls-remote", "--symref", remoteURL, "HEAD")
+func (s *Service) GetDefaultBranch(remoteURL, token string) (string, error) {
+	// Use authenticated URL if token is provided
+	branchURL := remoteURL
+	if token != "" {
+		branchURL = s.buildAuthenticatedURL(remoteURL, token)
+	}
+
+	cmd := exec.Command("git", "ls-remote", "--symref", branchURL, "HEAD")
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 
 	output, err := cmd.CombinedOutput()

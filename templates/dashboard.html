@@ -41,7 +41,7 @@
             <div class="flex items-center space-x-8">
                 <a href="/" class="text-xl font-bold text-white">Claude Code Server</a>
                 <div class="flex space-x-4">
-                    <a href="/" class="text-gray-300 hover:text-white transition-colors">Dashboard</a>
+                    <a href="/" class="text-white font-medium">Dashboard</a>
                     <a href="/sessions" class="text-gray-300 hover:text-white transition-colors">Sessions</a>
                     <a href="/projects" class="text-gray-300 hover:text-white transition-colors">Projects</a>
                     <a href="/terminal" class="text-gray-300 hover:text-white transition-colors">Terminal</a>
@@ -60,8 +60,8 @@
 
     <main class="max-w-7xl mx-auto px-4 py-8">
         <div class="space-y-8">
-            <div class="flex justify-between items-center">
-                <h1 class="text-3xl font-bold">Dashboard</h1>
+            <div>
+                <h1 class="text-3xl font-bold mb-4">Dashboard</h1>
                 <div class="flex space-x-4">
                     <a href="/sessions" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
                         View All Sessions
@@ -158,7 +158,7 @@
                                     </span>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                    {{.ProjectID}}
+                                    {{index $.ProjectMap .ProjectID}}
                                 </td>
                                 <td class="px-6 py-4 text-sm text-gray-300 max-w-xs truncate">
                                     {{.InitialPrompt}}
@@ -177,30 +177,5 @@
             </div>
         </div>
     </main>
-
-    <script>
-        // Auto-refresh live sessions
-        document.addEventListener('htmx:afterRequest', function(evt) {
-            if (evt.detail.xhr.status === 200 && evt.detail.target.hasAttribute('hx-trigger')) {
-                setTimeout(function() {
-                    htmx.trigger(evt.detail.target, 'refresh');
-                }, 2000);
-            }
-        });
-
-        // Handle server-sent events for live logs
-        function connectEventSource(url, target) {
-            const eventSource = new EventSource(url);
-            eventSource.onmessage = function(event) {
-                const data = JSON.parse(event.data);
-                const logElement = document.createElement('div');
-                logElement.className = 'text-sm font-mono border-l-2 border-blue-500 pl-2 mb-1';
-                logElement.innerHTML = `<span class="text-gray-400">[${data.log_type}]</span> ${data.content}`;
-                target.appendChild(logElement);
-                target.scrollTop = target.scrollHeight;
-            };
-            return eventSource;
-        }
-    </script>
 </body>
 </html>

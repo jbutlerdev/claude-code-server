@@ -26,6 +26,7 @@ type Session struct {
 	Status         SessionStatus `json:"status" db:"status"`
 	WorktreeID     string        `json:"worktree_id" db:"worktree_id"`
 	WorktreePath   string        `json:"worktree_path" db:"worktree_path"`
+	ConversationID *string       `json:"conversation_id,omitempty" db:"conversation_id"`
 	StartedAt      time.Time     `json:"started_at" db:"started_at"`
 	CompletedAt    *time.Time    `json:"completed_at,omitempty" db:"completed_at"`
 	Error          *string       `json:"error,omitempty" db:"error"`
@@ -164,17 +165,24 @@ type PushToRemoteResponse struct {
 }
 
 type Settings struct {
-	DefaultGitHubToken    string `json:"default_github_token"`
-	ClaudeCodeBinary      string `json:"claude_binary"`
-	MaxConcurrentSessions int    `json:"max_concurrent_sessions"`
-	GitUserName           string `json:"git_user_name"`
-	GitUserEmail          string `json:"git_user_email"`
+	ID                    uuid.UUID  `json:"id" db:"id"`
+	DefaultGitHubToken    *string    `json:"default_github_token,omitempty" db:"default_github_token"`
+	ClaudeCodeBinary      string     `json:"claude_code_binary" db:"claude_code_binary"`
+	ClaudeCodeAPIKey      *string    `json:"claude_code_api_key,omitempty" db:"claude_code_api_key"`
+	MaxConcurrentSessions int        `json:"max_concurrent_sessions" db:"max_concurrent_sessions"`
+	DefaultMaxTurns       *int       `json:"default_max_turns,omitempty" db:"default_max_turns"`
+	GitUserName           *string    `json:"git_user_name,omitempty" db:"git_user_name"`
+	GitUserEmail          *string    `json:"git_user_email,omitempty" db:"git_user_email"`
+	CreatedAt             time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt             time.Time  `json:"updated_at" db:"updated_at"`
 }
 
 type UpdateSettingsRequest struct {
 	DefaultGitHubToken    *string `json:"default_github_token,omitempty"`
-	ClaudeCodeBinary      *string `json:"claude_binary,omitempty"`
+	ClaudeCodeBinary      *string `json:"claude_code_binary,omitempty"`
+	ClaudeCodeAPIKey      *string `json:"claude_code_api_key,omitempty"`
 	MaxConcurrentSessions *int    `json:"max_concurrent_sessions,omitempty"`
+	DefaultMaxTurns       *int    `json:"default_max_turns,omitempty"`
 	GitUserName           *string `json:"git_user_name,omitempty"`
 	GitUserEmail          *string `json:"git_user_email,omitempty"`
 }

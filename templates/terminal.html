@@ -6,8 +6,6 @@
     <title>{{.Title}} - Claude Code Server</title>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/xterm@5.3.0/lib/xterm.js"></script>
-    <link href="https://unpkg.com/xterm@5.3.0/css/xterm.css" rel="stylesheet" />
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -35,7 +33,6 @@
     <style>
         .scrollbar-hide { scrollbar-width: none; -ms-overflow-style: none; }
         .scrollbar-hide::-webkit-scrollbar { display: none; }
-        .terminal-container { background: #000; }
     </style>
 </head>
 <body class="bg-dark-950 text-gray-100 min-h-screen">
@@ -63,8 +60,8 @@
 
     <main class="max-w-7xl mx-auto px-4 py-8">
         <div class="space-y-6">
-            <div class="flex justify-between items-center">
-                <h1 class="text-3xl font-bold text-white">Terminal</h1>
+            <div>
+                <h1 class="text-3xl font-bold text-white mb-4">Terminal</h1>
                 <div class="text-sm text-gray-400">
                     Use this terminal to run <code class="bg-dark-700 px-2 py-1 rounded">claude /login</code> to authenticate
                 </div>
@@ -77,73 +74,65 @@
             </div>
 
             <div class="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
-                <h3 class="text-blue-400 font-semibold mb-2">Quick Start:</h3>
-                <ol class="list-decimal list-inside space-y-1 text-sm text-gray-300">
-                    <li>Run <code class="bg-dark-700 px-1 rounded">claude /login</code> to authenticate with Anthropic</li>
-                    <li>Follow the OAuth flow in your browser</li>
-                    <li>Your authentication will persist across container restarts</li>
-                    <li>Use <code class="bg-dark-700 px-1 rounded">claude --help</code> to see available commands</li>
-                </ol>
+                <div class="flex items-start space-x-3">
+                    <div class="flex-shrink-0">
+                        <svg class="w-5 h-5 text-blue-400 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-medium text-blue-300 mb-1">Authentication Required</h3>
+                        <p class="text-sm text-blue-200/80">
+                            Before you can create sessions, you need to authenticate with Claude. Run <code class="bg-blue-800/50 px-1 py-0.5 rounded text-xs">claude /login</code> in the terminal above to get started.
+                        </p>
+                    </div>
+                </div>
             </div>
         </div>
+
+        <script>
+            // Only initialize terminal if the terminal element exists
+            if (document.getElementById('terminal')) {
+                // Load terminal scripts dynamically
+                const terminalScript = document.createElement('script');
+                terminalScript.src = 'https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js';
+                terminalScript.onload = function() {
+                    // Load CSS
+                    const terminalCSS = document.createElement('link');
+                    terminalCSS.rel = 'stylesheet';
+                    terminalCSS.href = 'https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css';
+                    document.head.appendChild(terminalCSS);
+                    
+                    // Initialize terminal
+                    const terminal = new Terminal({
+                        theme: {
+                            background: '#000000',
+                            foreground: '#ffffff',
+                            cursor: '#ffffff'
+                        }
+                    });
+                    
+                    const ws = new WebSocket(`ws://${window.location.host}/ws/terminal`);
+                    
+                    terminal.open(document.getElementById('terminal'));
+                    terminal.focus();
+                    
+                    terminal.onData(data => {
+                        ws.send(data);
+                    });
+                    
+                    ws.onmessage = event => {
+                        terminal.write(event.data);
+                    };
+                    
+                    ws.onclose = () => {
+                        terminal.write('\r\n\r\n[Connection closed]');
+                    };
+                };
+                document.head.appendChild(terminalScript);
+            }
+        </script>
+        </div>
     </main>
-
-    <script>
-        // Initialize terminal
-        const terminal = new Terminal({
-            cursorBlink: true,
-            fontSize: 14,
-            fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-            theme: {
-                background: '#000000',
-                foreground: '#ffffff',
-            }
-        });
-
-        terminal.open(document.getElementById('terminal'));
-
-        // Connect to WebSocket
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/ws/terminal`;
-        const ws = new WebSocket(wsUrl);
-
-        ws.onopen = function() {
-            terminal.write('\r\n\x1b[32mConnected to terminal\x1b[0m\r\n');
-        };
-
-        ws.onmessage = function(event) {
-            terminal.write(event.data);
-        };
-
-        ws.onclose = function() {
-            terminal.write('\r\n\x1b[31mConnection closed\x1b[0m\r\n');
-        };
-
-        ws.onerror = function() {
-            terminal.write('\r\n\x1b[31mConnection error\x1b[0m\r\n');
-        };
-
-        // Send terminal input to WebSocket
-        terminal.onData(function(data) {
-            if (ws.readyState === WebSocket.OPEN) {
-                ws.send(data);
-            }
-        });
-
-        // Handle terminal resize
-        function resizeTerminal() {
-            const container = document.getElementById('terminal');
-            const rect = container.getBoundingClientRect();
-            const cols = Math.floor((rect.width - 16) / 9); // Character width with padding
-            const rows = Math.floor((rect.height - 16) / 20); // Line height with padding
-            
-            if (cols > 0 && rows > 0) {
-                terminal.resize(cols, rows);
-            }
-        }
-
-        window.addEventListener('resize', resizeTerminal);
-        setTimeout(resizeTerminal, 500); // Delay for proper rendering
-    </script>
 </body>
 </html>

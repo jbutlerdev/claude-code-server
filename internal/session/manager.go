@@ -20,25 +20,32 @@ import (
 	"github.com/jbutlerdev/claude-code-server/internal/models"
 )
 
+type SettingsService interface {
+	GetDefaultMaxTurns() int
+}
+
 type Manager struct {
 	config    *config.Config
 	db        *sql.DB
+	settings  SettingsService
 	sessions  map[uuid.UUID]*ActiveSession
 	mu        sync.RWMutex
 	semaphore chan struct{}
 }
 
 type ActiveSession struct {
-	Session  *models.Session
-	Process  *exec.Cmd
-	LogsChan chan models.SessionLog
-	Cancel   context.CancelFunc
+	Session      *models.Session
+	Process      *exec.Cmd
+	LogsChan     chan models.SessionLog
+	Cancel       context.CancelFunc
+	ResumeFromID *string // Claude Code conversation ID to resume from
 }
 
-func NewManager(cfg *config.Config, db *sql.DB) *Manager {
+func NewManager(cfg *config.Config, db *sql.DB, settings SettingsService) *Manager {
 	return &Manager{
 		config:    cfg,
 		db:        db,
+		settings:  settings,
 		sessions:  make(map[uuid.UUID]*ActiveSession),
 		semaphore: make(chan struct{}, cfg.MaxConcurrentSessions),
 	}
@@ -111,7 +118,7 @@ func (m *Manager) CreateSession(ctx context.Context, req *models.CreateSessionRe
 	}
 
 	if session.MaxTurns == 0 {
-		session.MaxTurns = 25
+		session.MaxTurns = m.settings.GetDefaultMaxTurns()
 	}
 
 	_, err = m.db.ExecContext(ctx,
@@ -311,6 +318,11 @@ func (m *Manager) streamOutput(active *ActiveSession, reader io.Reader, logType 
 				// Successfully parsed JSON
 				jsonb := models.JSONB(jsonData)
 				sessionLog.JSONData = &jsonb
+				
+				// Extract conversation ID and store it in the session
+				if sessionID, exists := jsonData["session_id"].(string); exists && sessionID != "" {
+					m.updateSessionConversationID(active.Session.ID, sessionID)
+				}
 			}
 		}
 
@@ -409,6 +421,15 @@ func (m *Manager) updateSessionStatus(sessionID uuid.UUID, status models.Session
 	}
 }
 
+func (m *Manager) updateSessionConversationID(sessionID uuid.UUID, conversationID string) {
+	_, err := m.db.Exec(
+		"UPDATE sessions SET conversation_id = $1 WHERE id = $2",
+		conversationID, sessionID)
+	if err != nil {
+		log.Printf("Failed to update session conversation ID: %v", err)
+	}
+}
+
 func (m *Manager) GetActiveSession(sessionID uuid.UUID) (*ActiveSession, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -416,36 +437,168 @@ func (m *Manager) GetActiveSession(sessionID uuid.UUID) (*ActiveSession, bool) {
 	return session, ok
 }
 
-func (m *Manager) ResumeSession(ctx context.Context, sessionID uuid.UUID, prompt string) error {
+func (m *Manager) ResumeSession(ctx context.Context, sessionID uuid.UUID, prompt string) (*models.Session, error) {
 	var session models.Session
 	err := m.db.QueryRowContext(ctx,
-		`SELECT id, project_id, worktree_path, max_turns 
+		`SELECT id, project_id, worktree_id, worktree_path, max_turns, conversation_id 
 		 FROM sessions WHERE id = $1 AND status = 'completed'`,
-		sessionID).Scan(&session.ID, &session.ProjectID, &session.WorktreePath,
-		&session.MaxTurns)
+		sessionID).Scan(&session.ID, &session.ProjectID, &session.WorktreeID, &session.WorktreePath,
+		&session.MaxTurns, &session.ConversationID)
 	if err != nil {
-		return fmt.Errorf("session not found or not completed: %w", err)
+		return nil, fmt.Errorf("session not found or not completed: %w", err)
 	}
 
-	req := &models.CreateSessionRequest{
-		Prompt:    prompt,
-		ProjectID: session.ProjectID.String(),
-		MaxTurns:  session.MaxTurns,
+	if session.ConversationID == nil || *session.ConversationID == "" {
+		return nil, fmt.Errorf("session does not have a conversation ID for proper resumption")
 	}
 
-	newSession, err := m.CreateSession(ctx, req)
-	if err != nil {
-		return err
+	// Create new session for resumption tracking
+	newSession := &models.Session{
+		ID:             uuid.New(),
+		ProjectID:      session.ProjectID,
+		InitialPrompt:  prompt,
+		Model:          "claude-3-5-sonnet-20241022", // Fixed model for Claude Code CLI
+		MaxTurns:       session.MaxTurns,
+		Status:         models.SessionStatusStarting,
+		WorktreeID:     session.WorktreeID, // Reuse same worktree ID since constraint removed
+		WorktreePath:   session.WorktreePath,
+		StartedAt:      time.Now(),
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
 	}
 
+	// Insert new session with reference to original
 	_, err = m.db.ExecContext(ctx,
-		"UPDATE sessions SET metadata = jsonb_set(COALESCE(metadata, '{}'), '{resumed_from}', $1) WHERE id = $2",
-		fmt.Sprintf(`"%s"`, sessionID.String()), newSession.ID)
+		`INSERT INTO sessions (id, project_id, initial_prompt, model, max_turns, 
+		 status, worktree_id, worktree_path, started_at, created_at, updated_at, metadata)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+		newSession.ID, newSession.ProjectID, newSession.InitialPrompt, newSession.Model,
+		newSession.MaxTurns, newSession.Status, newSession.WorktreeID, newSession.WorktreePath,
+		newSession.StartedAt, newSession.CreatedAt, newSession.UpdatedAt,
+		fmt.Sprintf(`{"resumed_from": "%s", "original_conversation_id": "%s"}`, sessionID.String(), *session.ConversationID))
 	if err != nil {
-		log.Printf("Failed to update session metadata: %v", err)
+		return nil, fmt.Errorf("failed to create resume session: %w", err)
 	}
 
-	return nil
+	// Start session with resume flag
+	activeCtx, cancel := context.WithCancel(context.Background())
+	active := &ActiveSession{
+		Session:       newSession,
+		LogsChan:      make(chan models.SessionLog, 100),
+		Cancel:        cancel,
+		ResumeFromID:  session.ConversationID, // Store conversation ID for resumption
+	}
+
+	m.mu.Lock()
+	m.sessions[newSession.ID] = active
+	m.mu.Unlock()
+
+	go m.runResumedSession(activeCtx, active, prompt)
+
+	return newSession, nil
+}
+
+func (m *Manager) runResumedSession(ctx context.Context, active *ActiveSession, prompt string) {
+	defer func() {
+		<-m.semaphore
+		m.mu.Lock()
+		delete(m.sessions, active.Session.ID)
+		m.mu.Unlock()
+		close(active.LogsChan)
+	}()
+
+	// Log session start
+	m.logToSession(active, "system", fmt.Sprintf("Resuming Claude Code session %s", active.Session.ID))
+	m.logToSession(active, "system", fmt.Sprintf("Original conversation ID: %s", *active.ResumeFromID))
+	m.logToSession(active, "system", fmt.Sprintf("Working directory: %s", active.Session.WorktreePath))
+
+	// Check if worktree directory exists
+	if _, err := os.Stat(active.Session.WorktreePath); os.IsNotExist(err) {
+		m.handleSessionError(active, fmt.Errorf("worktree directory does not exist: %s", active.Session.WorktreePath))
+		return
+	}
+
+	m.updateSessionStatus(active.Session.ID, models.SessionStatusRunning)
+
+	// Use Claude Code's resume functionality
+	args := []string{
+		"--resume", *active.ResumeFromID, // Resume from specific conversation ID
+		"--max-turns", fmt.Sprintf("%d", active.Session.MaxTurns),
+		"--output-format", "stream-json",
+		"--verbose",
+		"--dangerously-skip-permissions",
+	}
+
+	// If user provided additional prompt, add it
+	if strings.TrimSpace(prompt) != "" {
+		args = append(args, "-p", prompt)
+	}
+
+	m.logToSession(active, "system", fmt.Sprintf("Command: %s %s", m.config.ClaudeCodeBinary, strings.Join(args, " ")))
+
+	cmd := exec.CommandContext(ctx, m.config.ClaudeCodeBinary, args...)
+	cmd.Dir = active.Session.WorktreePath
+
+	// Set up environment
+	env := append(os.Environ(),
+		fmt.Sprintf("ANTHROPIC_API_KEY=%s", m.config.ClaudeCodeAPIKey),
+		"SHELL=/bin/bash",
+		"HOME=/home/appuser",
+		"USER=appuser",
+		"NODE_NO_WARNINGS=1",
+	)
+	cmd.Env = env
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		m.handleSessionError(active, fmt.Errorf("failed to create stdout pipe: %w", err))
+		return
+	}
+
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		m.handleSessionError(active, fmt.Errorf("failed to create stderr pipe: %w", err))
+		return
+	}
+
+	if err := cmd.Start(); err != nil {
+		m.handleSessionError(active, fmt.Errorf("failed to start claude: %w", err))
+		return
+	}
+
+	m.logToSession(active, "system", fmt.Sprintf("Claude resume process started with PID: %d", cmd.Process.Pid))
+	active.Process = cmd
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		m.streamOutput(active, stdout, "stdout")
+	}()
+
+	go func() {
+		defer wg.Done()
+		m.streamOutput(active, stderr, "stderr")
+	}()
+
+	wg.Wait()
+
+	if err := cmd.Wait(); err != nil {
+		if ctx.Err() == nil {
+			exitCode := "unknown"
+			if exitError, ok := err.(*exec.ExitError); ok {
+				exitCode = fmt.Sprintf("%d", exitError.ExitCode())
+			}
+			m.handleSessionError(active, fmt.Errorf("claude resume process failed with exit code %s: %w", exitCode, err))
+			return
+		} else {
+			m.logToSession(active, "system", "Claude resume process cancelled by context")
+		}
+	}
+
+	m.logToSession(active, "system", "Claude resume process completed successfully")
+	m.updateSessionStatus(active.Session.ID, models.SessionStatusCompleted)
 }
 
 func (m *Manager) cleanupLoop() {

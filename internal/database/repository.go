@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -164,12 +165,12 @@ func (r *Repository) GetSession(ctx context.Context, id uuid.UUID) (*models.Sess
 	var session models.Session
 	err := r.db.QueryRowContext(ctx,
 		`SELECT id, project_id, initial_prompt, model, max_turns, status,
-		 worktree_id, worktree_path, started_at, completed_at, error, metadata,
+		 worktree_id, worktree_path, conversation_id, started_at, completed_at, error, metadata,
 		 push_branch, push_commit_hash, last_pushed_at, created_at, updated_at 
 		 FROM sessions WHERE id = $1`,
 		id).Scan(&session.ID, &session.ProjectID, &session.InitialPrompt,
 		&session.Model, &session.MaxTurns, &session.Status, &session.WorktreeID,
-		&session.WorktreePath, &session.StartedAt, &session.CompletedAt,
+		&session.WorktreePath, &session.ConversationID, &session.StartedAt, &session.CompletedAt,
 		&session.Error, &session.Metadata, &session.PushBranch, &session.PushCommitHash,
 		&session.LastPushedAt, &session.CreatedAt, &session.UpdatedAt)
 	if err != nil {
@@ -181,7 +182,7 @@ func (r *Repository) GetSession(ctx context.Context, id uuid.UUID) (*models.Sess
 func (r *Repository) ListSessions(ctx context.Context, query *models.ListSessionsQuery) (*models.ListResponse[models.Session], error) {
 	baseQuery := `
 		SELECT id, project_id, initial_prompt, model, max_turns, status,
-		       worktree_id, worktree_path, started_at, completed_at, error, metadata,
+		       worktree_id, worktree_path, conversation_id, started_at, completed_at, error, metadata,
 		       push_branch, push_commit_hash, last_pushed_at, created_at, updated_at
 		FROM sessions`
 
@@ -232,7 +233,7 @@ func (r *Repository) ListSessions(ctx context.Context, query *models.ListSession
 		var session models.Session
 		err := rows.Scan(&session.ID, &session.ProjectID, &session.InitialPrompt,
 			&session.Model, &session.MaxTurns, &session.Status, &session.WorktreeID,
-			&session.WorktreePath, &session.StartedAt, &session.CompletedAt,
+			&session.WorktreePath, &session.ConversationID, &session.StartedAt, &session.CompletedAt,
 			&session.Error, &session.Metadata, &session.PushBranch, &session.PushCommitHash,
 			&session.LastPushedAt, &session.CreatedAt, &session.UpdatedAt)
 		if err != nil {
@@ -312,4 +313,120 @@ func (r *Repository) UpdateSessionPush(ctx context.Context, id uuid.UUID, branch
 		return fmt.Errorf("failed to update session push info: %w", err)
 	}
 	return nil
+}
+
+// GetSettings retrieves the global settings from the database
+func (r *Repository) GetSettings(ctx context.Context) (*models.Settings, error) {
+	var settings models.Settings
+	err := r.db.QueryRowContext(ctx,
+		`SELECT id, default_github_token, claude_code_binary, claude_code_api_key, max_concurrent_sessions, 
+		 default_max_turns, git_user_name, git_user_email, created_at, updated_at
+		 FROM settings LIMIT 1`).Scan(
+		&settings.ID, &settings.DefaultGitHubToken, &settings.ClaudeCodeBinary,
+		&settings.ClaudeCodeAPIKey, &settings.MaxConcurrentSessions, &settings.DefaultMaxTurns, &settings.GitUserName, &settings.GitUserEmail,
+		&settings.CreatedAt, &settings.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// No settings exist, return defaults
+			return &models.Settings{
+				ID:                    uuid.New(),
+				ClaudeCodeBinary:      "/usr/local/bin/claude",
+				MaxConcurrentSessions: 10,
+				CreatedAt:             time.Now(),
+				UpdatedAt:             time.Now(),
+			}, nil
+		}
+		return nil, fmt.Errorf("failed to get settings: %w", err)
+	}
+	return &settings, nil
+}
+
+// UpdateSettings updates the global settings in the database
+func (r *Repository) UpdateSettings(ctx context.Context, req *models.UpdateSettingsRequest) (*models.Settings, error) {
+	// First, get the current settings to see if they exist
+	settings, err := r.GetSettings(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get current settings: %w", err)
+	}
+
+	// Check if we need to insert or update
+	var exists bool
+	err = r.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM settings LIMIT 1)").Scan(&exists)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if settings exist: %w", err)
+	}
+
+	if !exists {
+		// Insert new settings row
+		settings.ID = uuid.New()
+		settings.CreatedAt = time.Now()
+		settings.UpdatedAt = time.Now()
+		
+		_, err = r.db.ExecContext(ctx,
+			`INSERT INTO settings (id, default_github_token, claude_code_binary, claude_code_api_key, max_concurrent_sessions,
+			 default_max_turns, git_user_name, git_user_email, created_at, updated_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+			settings.ID, req.DefaultGitHubToken, settings.ClaudeCodeBinary, req.ClaudeCodeAPIKey,
+			settings.MaxConcurrentSessions, req.DefaultMaxTurns, req.GitUserName, req.GitUserEmail,
+			settings.CreatedAt, settings.UpdatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to insert settings: %w", err)
+		}
+	} else {
+		// Update existing settings
+		updates := []string{}
+		args := []interface{}{}
+		argIndex := 1
+
+		if req.DefaultGitHubToken != nil {
+			updates = append(updates, fmt.Sprintf("default_github_token = $%d", argIndex))
+			args = append(args, *req.DefaultGitHubToken)
+			argIndex++
+		}
+		if req.ClaudeCodeBinary != nil {
+			updates = append(updates, fmt.Sprintf("claude_code_binary = $%d", argIndex))
+			args = append(args, *req.ClaudeCodeBinary)
+			argIndex++
+		}
+		if req.ClaudeCodeAPIKey != nil {
+			updates = append(updates, fmt.Sprintf("claude_code_api_key = $%d", argIndex))
+			args = append(args, *req.ClaudeCodeAPIKey)
+			argIndex++
+		}
+		if req.MaxConcurrentSessions != nil {
+			updates = append(updates, fmt.Sprintf("max_concurrent_sessions = $%d", argIndex))
+			args = append(args, *req.MaxConcurrentSessions)
+			argIndex++
+		}
+		if req.DefaultMaxTurns != nil {
+			updates = append(updates, fmt.Sprintf("default_max_turns = $%d", argIndex))
+			args = append(args, *req.DefaultMaxTurns)
+			argIndex++
+		}
+		if req.GitUserName != nil {
+			updates = append(updates, fmt.Sprintf("git_user_name = $%d", argIndex))
+			args = append(args, *req.GitUserName)
+			argIndex++
+		}
+		if req.GitUserEmail != nil {
+			updates = append(updates, fmt.Sprintf("git_user_email = $%d", argIndex))
+			args = append(args, *req.GitUserEmail)
+			argIndex++
+		}
+
+		if len(updates) > 0 {
+			updates = append(updates, fmt.Sprintf("updated_at = $%d", argIndex))
+			args = append(args, time.Now())
+			argIndex++
+
+			query := fmt.Sprintf("UPDATE settings SET %s", strings.Join(updates, ", "))
+			_, err = r.db.ExecContext(ctx, query, args...)
+			if err != nil {
+				return nil, fmt.Errorf("failed to update settings: %w", err)
+			}
+		}
+	}
+
+	// Return updated settings
+	return r.GetSettings(ctx)
 }

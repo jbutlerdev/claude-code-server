@@ -8,17 +8,20 @@ import (
 	"github.com/jbutlerdev/claude-code-server/internal/database"
 	"github.com/jbutlerdev/claude-code-server/internal/git"
 	"github.com/jbutlerdev/claude-code-server/internal/models"
+	"github.com/jbutlerdev/claude-code-server/internal/settings"
 )
 
 type Service struct {
-	repo       *database.Repository
-	gitService *git.Service
+	repo            *database.Repository
+	gitService      *git.Service
+	settingsService *settings.Service
 }
 
-func NewService(repo *database.Repository) *Service {
+func NewService(repo *database.Repository, settingsService *settings.Service) *Service {
 	return &Service{
-		repo:       repo,
-		gitService: git.NewService(),
+		repo:            repo,
+		gitService:      git.NewService(),
+		settingsService: settingsService,
 	}
 }
 
@@ -32,7 +35,15 @@ func (s *Service) CreateProject(ctx context.Context, req *models.CreateProjectRe
 
 	// If there's a remote URL, attempt to clone it
 	if project.RemoteURL != nil && *project.RemoteURL != "" {
-		go s.cloneProjectAsync(project.ID, *project.RemoteURL, project.Path, project.DefaultBranch)
+		var token string
+		if project.GitHubToken != nil && *project.GitHubToken != "" {
+			token = *project.GitHubToken
+			log.Printf("CreateProject: Using project-specific GitHub token for project %s", project.Name)
+		} else {
+			token = s.settingsService.GetDefaultGitHubToken()
+			log.Printf("CreateProject: Using default GitHub token for project %s, token length: %d, token provided: %v", project.Name, len(token), token != "")
+		}
+		go s.cloneProjectAsync(project.ID, *project.RemoteURL, project.Path, project.DefaultBranch, token)
 	} else {
 		// For local projects, mark as ready
 		s.repo.UpdateProjectStatus(ctx, project.ID, "ready", nil)
@@ -42,11 +53,15 @@ func (s *Service) CreateProject(ctx context.Context, req *models.CreateProjectRe
 }
 
 // cloneProjectAsync clones a project repository in the background
-func (s *Service) cloneProjectAsync(projectID uuid.UUID, remoteURL, localPath, branch string) {
+func (s *Service) cloneProjectAsync(projectID uuid.UUID, remoteURL, localPath, branch, token string) {
 	ctx := context.Background()
 
+	// Debug logging
+	log.Printf("cloneProjectAsync called for project %s, remote URL: %s, branch: %s, token provided: %v", 
+		projectID, remoteURL, branch, token != "")
+
 	// First validate the repository
-	if err := s.gitService.ValidateRepository(remoteURL, branch); err != nil {
+	if err := s.gitService.ValidateRepository(remoteURL, branch, token); err != nil {
 		log.Printf("Failed to validate repository %s: %v", remoteURL, err)
 		errorMsg := err.Error()
 		s.repo.UpdateProjectStatus(ctx, projectID, "error", &errorMsg)
@@ -54,7 +69,7 @@ func (s *Service) cloneProjectAsync(projectID uuid.UUID, remoteURL, localPath, b
 	}
 
 	// Clone the repository
-	if err := s.gitService.CloneRepository(remoteURL, localPath, branch); err != nil {
+	if err := s.gitService.CloneRepository(remoteURL, localPath, branch, token); err != nil {
 		log.Printf("Failed to clone repository %s: %v", remoteURL, err)
 		errorMsg := err.Error()
 		s.repo.UpdateProjectStatus(ctx, projectID, "error", &errorMsg)
@@ -81,8 +96,16 @@ func (s *Service) SyncProject(ctx context.Context, projectID uuid.UUID) error {
 	// Check if repository exists locally
 	if !s.gitService.RepositoryExists(project.Path) {
 		// Repository doesn't exist, clone it
+		var token string
+		if project.GitHubToken != nil && *project.GitHubToken != "" {
+			token = *project.GitHubToken
+			log.Printf("Using project-specific GitHub token for project %s", project.Name)
+		} else {
+			token = s.settingsService.GetDefaultGitHubToken()
+			log.Printf("Using default GitHub token for project %s, token length: %d, token provided: %v", project.Name, len(token), token != "")
+		}
 		s.repo.UpdateProjectStatus(ctx, projectID, "syncing", nil)
-		go s.cloneProjectAsync(projectID, *project.RemoteURL, project.Path, project.DefaultBranch)
+		go s.cloneProjectAsync(projectID, *project.RemoteURL, project.Path, project.DefaultBranch, token)
 		return nil
 	}
 

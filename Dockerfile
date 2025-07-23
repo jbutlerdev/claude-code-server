@@ -13,7 +13,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o claude-code-serve
 
 FROM alpine:latest
 
-RUN apk add --no-cache ca-certificates git openssh-client postgresql-client util-linux nodejs npm bash
+RUN apk add --no-cache ca-certificates git openssh-client postgresql-client util-linux nodejs npm bash docker-cli docker-compose
 
 RUN addgroup -g 1000 appuser && \
     adduser -D -u 1000 -G appuser -s /bin/bash appuser

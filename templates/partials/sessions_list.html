@@ -4,6 +4,7 @@
         <tr>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Project</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Worktree</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Prompt</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Started</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
@@ -22,7 +23,10 @@
                 </span>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                {{.ProjectID}}
+                {{index $.ProjectMap .ProjectID}}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                {{.WorktreeID}}
             </td>
             <td class="px-6 py-4 text-sm text-gray-300 max-w-xs truncate">
                 {{.InitialPrompt}}

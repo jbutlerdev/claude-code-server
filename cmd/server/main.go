@@ -16,6 +16,7 @@ import (
 	"github.com/jbutlerdev/claude-code-server/internal/database"
 	"github.com/jbutlerdev/claude-code-server/internal/project"
 	"github.com/jbutlerdev/claude-code-server/internal/session"
+	"github.com/jbutlerdev/claude-code-server/internal/settings"
 	_ "github.com/lib/pq"
 )
 
@@ -45,16 +46,17 @@ func run(cfg *config.Config) error {
 		return fmt.Errorf("failed to run migrations: %w", err)
 	}
 
-	// Initialize project service and sync existing projects
+	// Initialize services
 	repo := database.NewRepository(db)
-	projectService := project.NewService(repo)
+	settingsService := settings.NewService(cfg, repo)
+	projectService := project.NewService(repo, settingsService)
 
 	log.Println("Syncing existing projects...")
 	if err := projectService.SyncAllProjects(context.Background()); err != nil {
 		log.Printf("Warning: failed to sync projects: %v", err)
 	}
 
-	sessionManager := session.NewManager(cfg, db)
+	sessionManager := session.NewManager(cfg, db, settingsService)
 	if err := sessionManager.Start(); err != nil {
 		return fmt.Errorf("failed to start session manager: %w", err)
 	}

@@ -16,9 +16,9 @@ import (
 func NewRouter(cfg *config.Config, db *sql.DB, sessionManager *session.Manager) http.Handler {
 	r := mux.NewRouter()
 	repo := database.NewRepository(db)
-	projectService := project.NewService(repo)
+	settingsService := settings.NewService(cfg, repo)
+	projectService := project.NewService(repo, settingsService)
 	gitService := git.NewService()
-	settingsService := settings.NewService(cfg)
 
 	api := &API{
 		config:          cfg,

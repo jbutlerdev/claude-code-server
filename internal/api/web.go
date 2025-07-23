@@ -40,6 +40,20 @@ func init() {
 			}
 			return *s
 		},
+		"dict": func(values ...interface{}) (map[string]interface{}, error) {
+			if len(values)%2 != 0 {
+				return nil, fmt.Errorf("dict requires an even number of arguments")
+			}
+			dict := make(map[string]interface{})
+			for i := 0; i < len(values); i += 2 {
+				key, ok := values[i].(string)
+				if !ok {
+					return nil, fmt.Errorf("dict keys must be strings")
+				}
+				dict[key] = values[i+1]
+			}
+			return dict, nil
+		},
 		"duration": func(start, end time.Time) string {
 			if end.IsZero() {
 				return "Running..."
@@ -77,16 +91,24 @@ func (api *API) dashboardHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Create a map of project ID to project name for easy lookup
+	projectMap := make(map[uuid.UUID]string)
+	for _, p := range projects {
+		projectMap[p.ID] = p.Name
+	}
+
 	data := struct {
-		Title    string
-		Sessions *models.ListResponse[models.Session]
-		Projects []*models.Project
-		Query    *models.ListSessionsQuery
+		Title      string
+		Sessions   *models.ListResponse[models.Session]
+		Projects   []*models.Project
+		ProjectMap map[uuid.UUID]string
+		Query      *models.ListSessionsQuery
 	}{
-		Title:    "Dashboard",
-		Sessions: sessions,
-		Projects: projects,
-		Query:    query,
+		Title:      "Dashboard",
+		Sessions:   sessions,
+		Projects:   projects,
+		ProjectMap: projectMap,
+		Query:      query,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -115,16 +137,24 @@ func (api *API) sessionsPageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Create a map of project ID to project name for easy lookup
+	projectMap := make(map[uuid.UUID]string)
+	for _, p := range projects {
+		projectMap[p.ID] = p.Name
+	}
+
 	data := struct {
-		Title    string
-		Sessions *models.ListResponse[models.Session]
-		Projects []*models.Project
-		Query    *models.ListSessionsQuery
+		Title       string
+		Sessions    *models.ListResponse[models.Session]
+		Projects    []*models.Project
+		ProjectMap  map[uuid.UUID]string
+		Query       *models.ListSessionsQuery
 	}{
-		Title:    "Sessions",
-		Sessions: sessions,
-		Projects: projects,
-		Query:    query,
+		Title:       "Sessions",
+		Sessions:    sessions,
+		Projects:    projects,
+		ProjectMap:  projectMap,
+		Query:       query,
 	}
 
 	if err := templates.ExecuteTemplate(w, "sessions.html", data); err != nil {
@@ -177,11 +207,13 @@ func (api *API) projectsPageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := struct {
-		Title    string
-		Projects []*models.Project
+		Title           string
+		Projects        []*models.Project
+		DefaultMaxTurns int
 	}{
-		Title:    "Projects",
-		Projects: projects,
+		Title:           "Projects",
+		Projects:        projects,
+		DefaultMaxTurns: api.settingsService.GetDefaultMaxTurns(),
 	}
 
 	if err := templates.ExecuteTemplate(w, "projects.html", data); err != nil {
@@ -243,7 +275,28 @@ func (api *API) htmxSessionsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := templates.ExecuteTemplate(w, "partials/sessions_list.html", sessions); err != nil {
+	// Fetch projects to create a map for name lookup
+	projects, err := api.repo.ListProjects(r.Context())
+	if err != nil {
+		http.Error(w, "Failed to load projects", http.StatusInternalServerError)
+		return
+	}
+
+	// Create a map of project ID to project name for easy lookup
+	projectMap := make(map[uuid.UUID]string)
+	for _, p := range projects {
+		projectMap[p.ID] = p.Name
+	}
+
+	data := struct {
+		Items      []models.Session
+		ProjectMap map[uuid.UUID]string
+	}{
+		Items:      sessions.Items,
+		ProjectMap: projectMap,
+	}
+
+	if err := templates.ExecuteTemplate(w, "partials/sessions_list.html", data); err != nil {
 		http.Error(w, "Template error", http.StatusInternalServerError)
 	}
 }
@@ -289,7 +342,7 @@ func (api *API) htmxResumeSessionHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	err = api.sessionManager.ResumeSession(r.Context(), id, prompt)
+	_, err = api.sessionManager.ResumeSession(r.Context(), id, prompt)
 	if err != nil {
 		http.Error(w, "Failed to resume session", http.StatusInternalServerError)
 		return
@@ -400,3 +453,4 @@ func (w *wsWriter) Write(p []byte) (n int, err error) {
 	}
 	return len(p), nil
 }
+

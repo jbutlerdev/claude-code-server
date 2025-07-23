@@ -1,14 +1,72 @@
-{{template "base.html" .}}
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - Claude Code Server</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: {
+                            50: '#f9fafb',
+                            100: '#f3f4f6',
+                            200: '#e5e7eb',
+                            300: '#d1d5db',
+                            400: '#9ca3af',
+                            500: '#6b7280',
+                            600: '#4b5563',
+                            700: '#374151',
+                            800: '#1f2937',
+                            900: '#111827',
+                            950: '#0f172a'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .scrollbar-hide { scrollbar-width: none; -ms-overflow-style: none; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="bg-dark-950 text-gray-100 min-h-screen">
+    <nav class="bg-dark-900 border-b border-dark-700 px-4 py-3">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-8">
+                <a href="/" class="text-xl font-bold text-white">Claude Code Server</a>
+                <div class="flex space-x-4">
+                    <a href="/" class="text-gray-300 hover:text-white transition-colors">Dashboard</a>
+                    <a href="/sessions" class="text-white font-medium">Sessions</a>
+                    <a href="/projects" class="text-gray-300 hover:text-white transition-colors">Projects</a>
+                    <a href="/terminal" class="text-gray-300 hover:text-white transition-colors">Terminal</a>
+                    <a href="/settings" class="text-gray-300 hover:text-white transition-colors">Settings</a>
+                    <a href="/api-docs" class="text-gray-300 hover:text-white transition-colors">API Docs</a>
+                </div>
+            </div>
+            <div class="flex items-center space-x-4">
+                <div class="text-sm text-gray-400">
+                    <span class="inline-block w-2 h-2 bg-green-500 rounded-full mr-1"></span>
+                    Online
+                </div>
+            </div>
+        </div>
+    </nav>
 
-{{define "content"}}
-<div class="space-y-6">
-    <div class="flex justify-between items-center">
-        <h1 class="text-3xl font-bold">Sessions</h1>
-        <button onclick="document.getElementById('new-session-modal').classList.remove('hidden')" 
-                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
-            New Session
-        </button>
-    </div>
+    <main class="max-w-7xl mx-auto px-4 py-8">
+        <div class="space-y-6">
+            <div>
+                <h1 class="text-3xl font-bold mb-4">Sessions</h1>
+                <button onclick="document.getElementById('new-session-modal').classList.remove('hidden')" 
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+                    New Session
+                </button>
+            </div>
 
     <!-- Filters -->
     <div class="bg-dark-800 rounded-lg p-4 border border-dark-700">
@@ -48,7 +106,7 @@
 
     <!-- Sessions List -->
     <div id="sessions-list">
-        {{template "partials/sessions_list.html" .Sessions}}
+        {{template "partials/sessions_list.html" dict "Items" .Sessions.Items "ProjectMap" .ProjectMap}}
     </div>
 </div>
 
@@ -128,4 +186,7 @@ async function createSession(event) {
     }
 }
 </script>
-{{end}}
+        </div>
+    </main>
+</body>
+</html>
