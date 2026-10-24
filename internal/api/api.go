@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os/exec"
 	"strconv"
@@ -58,7 +59,9 @@ type API struct {
 
 func (api *API) healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	if err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"}); err != nil {
+		log.Printf("api: encode ok response: %v", err)
+	}
 }
 
 func (api *API) readyHandler(w http.ResponseWriter, r *http.Request) {
@@ -68,13 +71,17 @@ func (api *API) readyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
+	if err := json.NewEncoder(w).Encode(map[string]string{"status": "ready"}); err != nil {
+		log.Printf("api: encode ready response: %v", err)
+	}
 }
 
 func (api *API) openAPIHandler(w http.ResponseWriter, r *http.Request) {
 	spec := api.generateOpenAPISpec()
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(spec)
+	if err := json.NewEncoder(w).Encode(spec); err != nil {
+		log.Printf("api: encode openapi spec: %v", err)
+	}
 }
 
 func (api *API) createSessionHandler(w http.ResponseWriter, r *http.Request) {

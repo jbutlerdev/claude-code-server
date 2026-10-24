@@ -35,7 +35,9 @@ func (s *Service) CreateProject(ctx context.Context, req *models.CreateProjectRe
 		go s.cloneProjectAsync(project.ID, *project.RemoteURL, project.Path, project.DefaultBranch)
 	} else {
 		// For local projects, mark as ready
-		s.repo.UpdateProjectStatus(ctx, project.ID, "ready", nil)
+		if serr := s.repo.UpdateProjectStatus(ctx, project.ID, "ready", nil); serr != nil {
+			log.Printf("project: UpdateProjectStatus: %v", serr)
+		}
 	}
 
 	return project, nil
@@ -49,7 +51,9 @@ func (s *Service) cloneProjectAsync(projectID uuid.UUID, remoteURL, localPath, b
 	if err := s.gitService.ValidateRepository(remoteURL, branch); err != nil {
 		log.Printf("Failed to validate repository %s: %v", remoteURL, err)
 		errorMsg := err.Error()
-		s.repo.UpdateProjectStatus(ctx, projectID, "error", &errorMsg)
+		if serr := s.repo.UpdateProjectStatus(ctx, projectID, "error", &errorMsg); serr != nil {
+			log.Printf("project: UpdateProjectStatus: %v", serr)
+		}
 		return
 	}
 
@@ -57,7 +61,9 @@ func (s *Service) cloneProjectAsync(projectID uuid.UUID, remoteURL, localPath, b
 	if err := s.gitService.CloneRepository(remoteURL, localPath, branch); err != nil {
 		log.Printf("Failed to clone repository %s: %v", remoteURL, err)
 		errorMsg := err.Error()
-		s.repo.UpdateProjectStatus(ctx, projectID, "error", &errorMsg)
+		if serr := s.repo.UpdateProjectStatus(ctx, projectID, "error", &errorMsg); serr != nil {
+			log.Printf("project: UpdateProjectStatus: %v", serr)
+		}
 		return
 	}
 

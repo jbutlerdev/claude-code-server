@@ -225,7 +225,7 @@ func (api *API) newProjectPageHandler(w http.ResponseWriter, r *http.Request) {
 
 func (api *API) settingsPageHandler(w http.ResponseWriter, r *http.Request) {
 	settings := api.settingsService.GetSettings()
-	
+
 	data := struct {
 		Title    string
 		Settings *models.Settings
@@ -382,18 +382,27 @@ func (api *API) terminalWSHandler(w http.ResponseWriter, r *http.Request) {
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		log.Printf("Failed to start PTY: %v", err)
-		conn.WriteMessage(websocket.TextMessage, []byte("Failed to start terminal: "+err.Error()+"\r\n"))
+		if werr := conn.WriteMessage(websocket.TextMessage, []byte("Failed to start terminal: "+err.Error()+"\r\n")); werr != nil {
+			log.Printf("api: write terminal error msg: %v", werr)
+		}
 		return
 	}
 	defer func() {
 		ptmx.Close()
-		cmd.Process.Kill()
+		if kerr := cmd.Process.Kill(); kerr != nil {
+			log.Printf("api: kill terminal process: %v", kerr)
+		}
 	}()
 
 	// Copy terminal output to websocket
 	go func() {
 		defer conn.Close()
-		io.Copy(&wsWriter{conn: conn}, ptmx)
+		if _, cerr := io.Copy(&wsWriter{conn: conn}, ptmx); cerr != nil {
+			// EOF on pty close is expected at session end.
+			if cerr != io.EOF {
+				log.Printf("api: pty->ws copy: %v", cerr)
+			}
+		}
 	}()
 
 	// Copy websocket input to terminal
