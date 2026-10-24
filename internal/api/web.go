@@ -55,8 +55,30 @@ func init() {
 		},
 	}
 	templates = template.New("").Funcs(funcMap)
-	templates = template.Must(templates.ParseGlob(filepath.Join("templates", "*.html")))
-	templates = template.Must(templates.ParseGlob(filepath.Join("templates", "partials", "*.html")))
+	// Resolve templates relative to the working directory; fall back to the
+	// package-relative location so `go test ./...` (which runs the test
+	// binary with cwd = the package directory) does not panic in init.
+	// The fallback only ever triggers where the previous code would have
+	// panicked, so production behaviour is unchanged.
+	roots := []string{".", filepath.Join("..", "..")}
+	var lastErr error
+	for _, root := range roots {
+		t := template.New("").Funcs(funcMap)
+		t, lastErr = t.ParseGlob(filepath.Join(root, "templates", "*.html"))
+		if lastErr != nil {
+			continue
+		}
+		t, lastErr = t.ParseGlob(filepath.Join(root, "templates", "partials", "*.html"))
+		if lastErr != nil {
+			continue
+		}
+		templates = t
+		lastErr = nil
+		break
+	}
+	if lastErr != nil {
+		panic(fmt.Sprintf("api: load templates: %v", lastErr))
+	}
 }
 
 func (api *API) dashboardHandler(w http.ResponseWriter, r *http.Request) {

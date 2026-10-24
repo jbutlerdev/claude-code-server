@@ -78,7 +78,6 @@ func TestCreateSessionRequestValidation(t *testing.T) {
 	req := CreateSessionRequest{
 		Prompt:    "Test prompt",
 		ProjectID: uuid.New().String(),
-		Model:     "claude-3-5-sonnet-20241022",
 		MaxTurns:  10,
 	}
 

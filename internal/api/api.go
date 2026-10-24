@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -13,20 +14,44 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/jbutlerdev/claude-code-server/internal/config"
-	"github.com/jbutlerdev/claude-code-server/internal/database"
 	"github.com/jbutlerdev/claude-code-server/internal/git"
 	"github.com/jbutlerdev/claude-code-server/internal/models"
-	"github.com/jbutlerdev/claude-code-server/internal/project"
 	"github.com/jbutlerdev/claude-code-server/internal/session"
 	"github.com/jbutlerdev/claude-code-server/internal/settings"
 )
 
+// Repository is the persistence seam used by the API layer.
+// *database.Repository is the production implementation; tests use
+// mockRepository (api_test.go). Declaring it here (consumer-side,
+// Go idiom) keeps main wiring unchanged via implicit satisfaction.
+type Repository interface {
+	CreateProject(ctx context.Context, req *models.CreateProjectRequest) (*models.Project, error)
+	GetProject(ctx context.Context, id uuid.UUID) (*models.Project, error)
+	ListProjects(ctx context.Context) ([]*models.Project, error)
+	UpdateProject(ctx context.Context, id uuid.UUID, req *models.UpdateProjectRequest) (*models.Project, error)
+	DeleteProject(ctx context.Context, id uuid.UUID) error
+	GetSession(ctx context.Context, id uuid.UUID) (*models.Session, error)
+	ListSessions(ctx context.Context, query *models.ListSessionsQuery) (*models.ListResponse[models.Session], error)
+	DeleteSession(ctx context.Context, id uuid.UUID) error
+	UpdateSessionPush(ctx context.Context, id uuid.UUID, branch, commitHash string) error
+	GetSessionLogs(ctx context.Context, sessionID uuid.UUID, limit int) ([]*models.SessionLog, error)
+}
+
+// ProjectCreator is the narrow API-layer seam for project creation.
+// *project.Service is the production implementation.
+type ProjectCreator interface {
+	CreateProject(ctx context.Context, req *models.CreateProjectRequest) (*models.Project, error)
+}
+
 type API struct {
-	config          *config.Config
-	db              *sql.DB
-	repo            *database.Repository
-	sessionManager  *session.Manager
-	projectService  *project.Service
+	config         *config.Config
+	db             *sql.DB
+	repo           Repository
+	sessionManager *session.Manager
+	// projectService is consumed through the narrow ProjectCreator seam
+	// below (the only method the API layer calls); *project.Service
+	// satisfies it implicitly, production wiring unchanged.
+	projectService  ProjectCreator
 	gitService      *git.Service
 	settingsService *settings.Service
 }
@@ -406,7 +431,7 @@ func (api *API) pushSessionToRemoteHandler(w http.ResponseWriter, r *http.Reques
 	} else {
 		gitUserName, _ = api.settingsService.GetGitIdentity()
 	}
-	
+
 	if project.GitUserEmail != nil && *project.GitUserEmail != "" {
 		gitUserEmail = *project.GitUserEmail
 	} else {
@@ -503,7 +528,7 @@ func (api *API) pushSessionToRemoteHandler(w http.ResponseWriter, r *http.Reques
 
 func (api *API) getSettingsHandler(w http.ResponseWriter, r *http.Request) {
 	settings := api.settingsService.GetSettings()
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(settings)
 }
@@ -514,12 +539,12 @@ func (api *API) updateSettingsHandler(w http.ResponseWriter, r *http.Request) {
 		api.writeError(w, http.StatusBadRequest, "Invalid request body", err)
 		return
 	}
-	
+
 	if err := api.settingsService.UpdateSettings(&req); err != nil {
 		api.writeError(w, http.StatusInternalServerError, "Failed to update settings", err)
 		return
 	}
-	
+
 	// Return updated settings
 	settings := api.settingsService.GetSettings()
 	w.Header().Set("Content-Type", "application/json")
