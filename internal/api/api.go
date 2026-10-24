@@ -1,9 +1,11 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os/exec"
 	"strconv"
@@ -13,27 +15,53 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/jbutlerdev/claude-code-server/internal/config"
-	"github.com/jbutlerdev/claude-code-server/internal/database"
 	"github.com/jbutlerdev/claude-code-server/internal/git"
 	"github.com/jbutlerdev/claude-code-server/internal/models"
-	"github.com/jbutlerdev/claude-code-server/internal/project"
 	"github.com/jbutlerdev/claude-code-server/internal/session"
 	"github.com/jbutlerdev/claude-code-server/internal/settings"
 )
 
+// Repository is the persistence seam used by the API layer.
+// *database.Repository is the production implementation; tests use
+// mockRepository (api_test.go). Declaring it here (consumer-side,
+// Go idiom) keeps main wiring unchanged via implicit satisfaction.
+type Repository interface {
+	CreateProject(ctx context.Context, req *models.CreateProjectRequest) (*models.Project, error)
+	GetProject(ctx context.Context, id uuid.UUID) (*models.Project, error)
+	ListProjects(ctx context.Context) ([]*models.Project, error)
+	UpdateProject(ctx context.Context, id uuid.UUID, req *models.UpdateProjectRequest) (*models.Project, error)
+	DeleteProject(ctx context.Context, id uuid.UUID) error
+	GetSession(ctx context.Context, id uuid.UUID) (*models.Session, error)
+	ListSessions(ctx context.Context, query *models.ListSessionsQuery) (*models.ListResponse[models.Session], error)
+	DeleteSession(ctx context.Context, id uuid.UUID) error
+	UpdateSessionPush(ctx context.Context, id uuid.UUID, branch, commitHash string) error
+	GetSessionLogs(ctx context.Context, sessionID uuid.UUID, limit int) ([]*models.SessionLog, error)
+}
+
+// ProjectCreator is the narrow API-layer seam for project creation.
+// *project.Service is the production implementation.
+type ProjectCreator interface {
+	CreateProject(ctx context.Context, req *models.CreateProjectRequest) (*models.Project, error)
+}
+
 type API struct {
-	config          *config.Config
-	db              *sql.DB
-	repo            *database.Repository
-	sessionManager  *session.Manager
-	projectService  *project.Service
+	config         *config.Config
+	db             *sql.DB
+	repo           Repository
+	sessionManager *session.Manager
+	// projectService is consumed through the narrow ProjectCreator seam
+	// below (the only method the API layer calls); *project.Service
+	// satisfies it implicitly, production wiring unchanged.
+	projectService  ProjectCreator
 	gitService      *git.Service
 	settingsService *settings.Service
 }
 
 func (api *API) healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	if err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"}); err != nil {
+		log.Printf("api: encode ok response: %v", err)
+	}
 }
 
 func (api *API) readyHandler(w http.ResponseWriter, r *http.Request) {
@@ -43,13 +71,17 @@ func (api *API) readyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
+	if err := json.NewEncoder(w).Encode(map[string]string{"status": "ready"}); err != nil {
+		log.Printf("api: encode ready response: %v", err)
+	}
 }
 
 func (api *API) openAPIHandler(w http.ResponseWriter, r *http.Request) {
 	spec := api.generateOpenAPISpec()
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(spec)
+	if err := json.NewEncoder(w).Encode(spec); err != nil {
+		log.Printf("api: encode openapi spec: %v", err)
+	}
 }
 
 func (api *API) createSessionHandler(w http.ResponseWriter, r *http.Request) {
@@ -85,7 +117,9 @@ func (api *API) createSessionHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("api: encode response: %v", err)
+	}
 }
 
 func (api *API) listSessionsHandler(w http.ResponseWriter, r *http.Request) {
@@ -107,7 +141,9 @@ func (api *API) listSessionsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		log.Printf("api: encode response: %v", err)
+	}
 }
 
 func (api *API) getSessionHandler(w http.ResponseWriter, r *http.Request) {
@@ -128,7 +164,9 @@ func (api *API) getSessionHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(session)
+	if err := json.NewEncoder(w).Encode(session); err != nil {
+		log.Printf("api: encode response: %v", err)
+	}
 }
 
 func (api *API) deleteSessionHandler(w http.ResponseWriter, r *http.Request) {
@@ -199,7 +237,9 @@ func (api *API) getSessionLogsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(logs)
+	if err := json.NewEncoder(w).Encode(logs); err != nil {
+		log.Printf("api: encode response: %v", err)
+	}
 }
 
 func (api *API) createProjectHandler(w http.ResponseWriter, r *http.Request) {
@@ -222,7 +262,9 @@ func (api *API) createProjectHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(project)
+	if err := json.NewEncoder(w).Encode(project); err != nil {
+		log.Printf("api: encode response: %v", err)
+	}
 }
 
 func (api *API) listProjectsHandler(w http.ResponseWriter, r *http.Request) {
@@ -233,7 +275,9 @@ func (api *API) listProjectsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(projects)
+	if err := json.NewEncoder(w).Encode(projects); err != nil {
+		log.Printf("api: encode response: %v", err)
+	}
 }
 
 func (api *API) getProjectHandler(w http.ResponseWriter, r *http.Request) {
@@ -254,7 +298,9 @@ func (api *API) getProjectHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(project)
+	if err := json.NewEncoder(w).Encode(project); err != nil {
+		log.Printf("api: encode response: %v", err)
+	}
 }
 
 func (api *API) updateProjectHandler(w http.ResponseWriter, r *http.Request) {
@@ -277,7 +323,9 @@ func (api *API) updateProjectHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(project)
+	if err := json.NewEncoder(w).Encode(project); err != nil {
+		log.Printf("api: encode response: %v", err)
+	}
 }
 
 func (api *API) deleteProjectHandler(w http.ResponseWriter, r *http.Request) {
@@ -338,7 +386,9 @@ func (api *API) writeError(w http.ResponseWriter, status int, message string, er
 		response.Message = err.Error()
 	}
 
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("api: encode response: %v", err)
+	}
 }
 
 func getIntQuery(r *http.Request, key string, defaultValue int) int {
@@ -406,7 +456,7 @@ func (api *API) pushSessionToRemoteHandler(w http.ResponseWriter, r *http.Reques
 	} else {
 		gitUserName, _ = api.settingsService.GetGitIdentity()
 	}
-	
+
 	if project.GitUserEmail != nil && *project.GitUserEmail != "" {
 		gitUserEmail = *project.GitUserEmail
 	} else {
@@ -498,14 +548,18 @@ func (api *API) pushSessionToRemoteHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("api: encode response: %v", err)
+	}
 }
 
 func (api *API) getSettingsHandler(w http.ResponseWriter, r *http.Request) {
 	settings := api.settingsService.GetSettings()
-	
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(settings)
+	if err := json.NewEncoder(w).Encode(settings); err != nil {
+		log.Printf("api: encode response: %v", err)
+	}
 }
 
 func (api *API) updateSettingsHandler(w http.ResponseWriter, r *http.Request) {
@@ -514,14 +568,16 @@ func (api *API) updateSettingsHandler(w http.ResponseWriter, r *http.Request) {
 		api.writeError(w, http.StatusBadRequest, "Invalid request body", err)
 		return
 	}
-	
+
 	if err := api.settingsService.UpdateSettings(&req); err != nil {
 		api.writeError(w, http.StatusInternalServerError, "Failed to update settings", err)
 		return
 	}
-	
+
 	// Return updated settings
 	settings := api.settingsService.GetSettings()
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(settings)
+	if err := json.NewEncoder(w).Encode(settings); err != nil {
+		log.Printf("api: encode response: %v", err)
+	}
 }

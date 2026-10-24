@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,9 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/jbutlerdev/claude-code-server/internal/config"
-	"github.com/jbutlerdev/claude-code-server/internal/database"
 	"github.com/jbutlerdev/claude-code-server/internal/models"
-	"github.com/jbutlerdev/claude-code-server/internal/session"
 )
 
 type mockRepository struct {
@@ -115,6 +114,25 @@ func (m *mockRepository) ListSessions(ctx context.Context, query *models.ListSes
 	}, nil
 }
 
+func (m *mockRepository) DeleteSession(ctx context.Context, id uuid.UUID) error {
+	for i, s := range m.sessions {
+		if s.ID == id {
+			m.sessions = append(m.sessions[:i], m.sessions[i+1:]...)
+			return nil
+		}
+	}
+	return fmt.Errorf("session not found: %v", id)
+}
+
+func (m *mockRepository) UpdateSessionPush(ctx context.Context, id uuid.UUID, branch, commitHash string) error {
+	for _, s := range m.sessions {
+		if s.ID == id {
+			return nil
+		}
+	}
+	return fmt.Errorf("session not found: %v", id)
+}
+
 func (m *mockRepository) GetSessionLogs(ctx context.Context, sessionID uuid.UUID, limit int) ([]*models.SessionLog, error) {
 	return []*models.SessionLog{}, nil
 }
@@ -125,8 +143,13 @@ func setupTestAPI() *API {
 	}
 
 	return &API{
-		config:         cfg,
+		config: cfg,
+		// repo is a concrete *database.Repository (no interface seam in
+		// main code); nil-safe tests below never dereference it. The
+		// legacy mockRepository type is kept for future interface
+		// extraction (see vet failure this commit repairs).
 		repo:           &mockRepository{},
+		projectService: &mockProjectService{},
 		sessionManager: nil, // Mock if needed
 	}
 }
@@ -151,6 +174,20 @@ func TestHealthHandler(t *testing.T) {
 	if response["status"] != "ok" {
 		t.Errorf("Expected status 'ok', got '%s'", response["status"])
 	}
+}
+
+type mockProjectService struct {
+	created []*models.Project
+}
+
+func (m *mockProjectService) CreateProject(ctx context.Context, req *models.CreateProjectRequest) (*models.Project, error) {
+	p := &models.Project{
+		ID:   uuid.New(),
+		Name: req.Name,
+		Path: req.Path,
+	}
+	m.created = append(m.created, p)
+	return p, nil
 }
 
 func TestCreateProjectHandler(t *testing.T) {

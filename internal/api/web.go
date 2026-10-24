@@ -55,8 +55,30 @@ func init() {
 		},
 	}
 	templates = template.New("").Funcs(funcMap)
-	templates = template.Must(templates.ParseGlob(filepath.Join("templates", "*.html")))
-	templates = template.Must(templates.ParseGlob(filepath.Join("templates", "partials", "*.html")))
+	// Resolve templates relative to the working directory; fall back to the
+	// package-relative location so `go test ./...` (which runs the test
+	// binary with cwd = the package directory) does not panic in init.
+	// The fallback only ever triggers where the previous code would have
+	// panicked, so production behaviour is unchanged.
+	roots := []string{".", filepath.Join("..", "..")}
+	var lastErr error
+	for _, root := range roots {
+		t := template.New("").Funcs(funcMap)
+		t, lastErr = t.ParseGlob(filepath.Join(root, "templates", "*.html"))
+		if lastErr != nil {
+			continue
+		}
+		t, lastErr = t.ParseGlob(filepath.Join(root, "templates", "partials", "*.html"))
+		if lastErr != nil {
+			continue
+		}
+		templates = t
+		lastErr = nil
+		break
+	}
+	if lastErr != nil {
+		panic(fmt.Sprintf("api: load templates: %v", lastErr))
+	}
 }
 
 func (api *API) dashboardHandler(w http.ResponseWriter, r *http.Request) {
@@ -203,7 +225,7 @@ func (api *API) newProjectPageHandler(w http.ResponseWriter, r *http.Request) {
 
 func (api *API) settingsPageHandler(w http.ResponseWriter, r *http.Request) {
 	settings := api.settingsService.GetSettings()
-	
+
 	data := struct {
 		Title    string
 		Settings *models.Settings
@@ -360,18 +382,27 @@ func (api *API) terminalWSHandler(w http.ResponseWriter, r *http.Request) {
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		log.Printf("Failed to start PTY: %v", err)
-		conn.WriteMessage(websocket.TextMessage, []byte("Failed to start terminal: "+err.Error()+"\r\n"))
+		if werr := conn.WriteMessage(websocket.TextMessage, []byte("Failed to start terminal: "+err.Error()+"\r\n")); werr != nil {
+			log.Printf("api: write terminal error msg: %v", werr)
+		}
 		return
 	}
 	defer func() {
 		ptmx.Close()
-		cmd.Process.Kill()
+		if kerr := cmd.Process.Kill(); kerr != nil {
+			log.Printf("api: kill terminal process: %v", kerr)
+		}
 	}()
 
 	// Copy terminal output to websocket
 	go func() {
 		defer conn.Close()
-		io.Copy(&wsWriter{conn: conn}, ptmx)
+		if _, cerr := io.Copy(&wsWriter{conn: conn}, ptmx); cerr != nil {
+			// EOF on pty close is expected at session end.
+			if cerr != io.EOF {
+				log.Printf("api: pty->ws copy: %v", cerr)
+			}
+		}
 	}()
 
 	// Copy websocket input to terminal

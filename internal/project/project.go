@@ -35,7 +35,9 @@ func (s *Service) CreateProject(ctx context.Context, req *models.CreateProjectRe
 		go s.cloneProjectAsync(project.ID, *project.RemoteURL, project.Path, project.DefaultBranch)
 	} else {
 		// For local projects, mark as ready
-		s.repo.UpdateProjectStatus(ctx, project.ID, "ready", nil)
+		if serr := s.repo.UpdateProjectStatus(ctx, project.ID, "ready", nil); serr != nil {
+			log.Printf("project: UpdateProjectStatus: %v", serr)
+		}
 	}
 
 	return project, nil
@@ -49,7 +51,9 @@ func (s *Service) cloneProjectAsync(projectID uuid.UUID, remoteURL, localPath, b
 	if err := s.gitService.ValidateRepository(remoteURL, branch); err != nil {
 		log.Printf("Failed to validate repository %s: %v", remoteURL, err)
 		errorMsg := err.Error()
-		s.repo.UpdateProjectStatus(ctx, projectID, "error", &errorMsg)
+		if serr := s.repo.UpdateProjectStatus(ctx, projectID, "error", &errorMsg); serr != nil {
+			log.Printf("project: UpdateProjectStatus: %v", serr)
+		}
 		return
 	}
 
@@ -57,13 +61,17 @@ func (s *Service) cloneProjectAsync(projectID uuid.UUID, remoteURL, localPath, b
 	if err := s.gitService.CloneRepository(remoteURL, localPath, branch); err != nil {
 		log.Printf("Failed to clone repository %s: %v", remoteURL, err)
 		errorMsg := err.Error()
-		s.repo.UpdateProjectStatus(ctx, projectID, "error", &errorMsg)
+		if serr := s.repo.UpdateProjectStatus(ctx, projectID, "error", &errorMsg); serr != nil {
+			log.Printf("project: UpdateProjectStatus: %v", serr)
+		}
 		return
 	}
 
 	// Mark as ready
 	log.Printf("Successfully cloned repository %s to %s", remoteURL, localPath)
-	s.repo.UpdateProjectStatus(ctx, projectID, "ready", nil)
+	if serr := s.repo.UpdateProjectStatus(ctx, projectID, "ready", nil); serr != nil {
+		log.Printf("project: UpdateProjectStatus: %v", serr)
+	}
 }
 
 // SyncProject ensures a project's repository is up to date
@@ -75,19 +83,29 @@ func (s *Service) SyncProject(ctx context.Context, projectID uuid.UUID) error {
 
 	if project.RemoteURL == nil || *project.RemoteURL == "" {
 		// Local project, just mark as ready
-		return s.repo.UpdateProjectStatus(ctx, projectID, "ready", nil)
+		if serr := s.repo.UpdateProjectStatus(ctx, projectID, "ready", nil); serr != nil {
+			log.Printf("project: UpdateProjectStatus: %v", serr)
+			return serr
+		}
+		return nil
 	}
 
 	// Check if repository exists locally
 	if !s.gitService.RepositoryExists(project.Path) {
 		// Repository doesn't exist, clone it
-		s.repo.UpdateProjectStatus(ctx, projectID, "syncing", nil)
+		if serr := s.repo.UpdateProjectStatus(ctx, projectID, "syncing", nil); serr != nil {
+			log.Printf("project: UpdateProjectStatus: %v", serr)
+		}
 		go s.cloneProjectAsync(projectID, *project.RemoteURL, project.Path, project.DefaultBranch)
 		return nil
 	}
 
 	// Repository exists, mark as ready
-	return s.repo.UpdateProjectStatus(ctx, projectID, "ready", nil)
+	if serr := s.repo.UpdateProjectStatus(ctx, projectID, "ready", nil); serr != nil {
+		log.Printf("project: UpdateProjectStatus: %v", serr)
+		return serr
+	}
+	return nil
 }
 
 // SyncAllProjects ensures all projects have their repositories available
