@@ -117,7 +117,9 @@ func (api *API) createSessionHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("api: encode response: %v", err)
+	}
 }
 
 func (api *API) listSessionsHandler(w http.ResponseWriter, r *http.Request) {
@@ -139,7 +141,9 @@ func (api *API) listSessionsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		log.Printf("api: encode response: %v", err)
+	}
 }
 
 func (api *API) getSessionHandler(w http.ResponseWriter, r *http.Request) {
@@ -160,7 +164,9 @@ func (api *API) getSessionHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(session)
+	if err := json.NewEncoder(w).Encode(session); err != nil {
+		log.Printf("api: encode response: %v", err)
+	}
 }
 
 func (api *API) deleteSessionHandler(w http.ResponseWriter, r *http.Request) {
@@ -231,7 +237,9 @@ func (api *API) getSessionLogsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(logs)
+	if err := json.NewEncoder(w).Encode(logs); err != nil {
+		log.Printf("api: encode response: %v", err)
+	}
 }
 
 func (api *API) createProjectHandler(w http.ResponseWriter, r *http.Request) {
@@ -254,7 +262,9 @@ func (api *API) createProjectHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(project)
+	if err := json.NewEncoder(w).Encode(project); err != nil {
+		log.Printf("api: encode response: %v", err)
+	}
 }
 
 func (api *API) listProjectsHandler(w http.ResponseWriter, r *http.Request) {
@@ -265,7 +275,9 @@ func (api *API) listProjectsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(projects)
+	if err := json.NewEncoder(w).Encode(projects); err != nil {
+		log.Printf("api: encode response: %v", err)
+	}
 }
 
 func (api *API) getProjectHandler(w http.ResponseWriter, r *http.Request) {
@@ -286,7 +298,9 @@ func (api *API) getProjectHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(project)
+	if err := json.NewEncoder(w).Encode(project); err != nil {
+		log.Printf("api: encode response: %v", err)
+	}
 }
 
 func (api *API) updateProjectHandler(w http.ResponseWriter, r *http.Request) {
@@ -309,7 +323,9 @@ func (api *API) updateProjectHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(project)
+	if err := json.NewEncoder(w).Encode(project); err != nil {
+		log.Printf("api: encode response: %v", err)
+	}
 }
 
 func (api *API) deleteProjectHandler(w http.ResponseWriter, r *http.Request) {
@@ -370,7 +386,9 @@ func (api *API) writeError(w http.ResponseWriter, status int, message string, er
 		response.Message = err.Error()
 	}
 
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("api: encode response: %v", err)
+	}
 }
 
 func getIntQuery(r *http.Request, key string, defaultValue int) int {
@@ -530,14 +548,18 @@ func (api *API) pushSessionToRemoteHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("api: encode response: %v", err)
+	}
 }
 
 func (api *API) getSettingsHandler(w http.ResponseWriter, r *http.Request) {
 	settings := api.settingsService.GetSettings()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(settings)
+	if err := json.NewEncoder(w).Encode(settings); err != nil {
+		log.Printf("api: encode response: %v", err)
+	}
 }
 
 func (api *API) updateSettingsHandler(w http.ResponseWriter, r *http.Request) {
@@ -555,5 +577,7 @@ func (api *API) updateSettingsHandler(w http.ResponseWriter, r *http.Request) {
 	// Return updated settings
 	settings := api.settingsService.GetSettings()
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(settings)
+	if err := json.NewEncoder(w).Encode(settings); err != nil {
+		log.Printf("api: encode response: %v", err)
+	}
 }

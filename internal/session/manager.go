@@ -162,14 +162,13 @@ func (m *Manager) createWorktree(project models.Project, worktreePath string) er
 	cmd.Dir = project.Path
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 
-	output, err := cmd.CombinedOutput()
-	if err != nil {
+	if _, err := cmd.CombinedOutput(); err != nil {
 		// If branch already exists, try creating worktree without new branch
 		cmd = exec.Command("git", "worktree", "add", worktreePath, project.DefaultBranch)
 		cmd.Dir = project.Path
 		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 
-		output, err = cmd.CombinedOutput()
+		output, err := cmd.CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("failed to create worktree: %s", string(output))
 		}
